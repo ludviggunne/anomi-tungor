@@ -1,0 +1,171 @@
+#include <stdlib.h>
+#include <string.h>
+#include <errno.h>
+#include <stdio.h>
+#include <cjson/cJSON.h>
+
+#include "xmalloc.h"
+#include "config.h"
+
+static char s_errorbuf[512] = {0};
+
+static void default_config(struct config *cfg)
+{
+  cfg->level               = 0.f;
+  cfg->min_offset          = .01f;
+  cfg->max_offset          = 2.f;
+  cfg->min_length          = .01f;
+  cfg->max_length          = 2.f;
+  cfg->min_cooldown        = .01f;
+  cfg->max_cooldown        = 2.f;
+  cfg->min_gain            = 0.01f;
+  cfg->max_gain            = 1.f;
+  cfg->min_multiplier      = 1.f;
+  cfg->max_multiplier      = 3.f / 2.f;
+  cfg->reverse_probability = .1f;
+  cfg->num_slots           = 8;
+}
+
+static char *load_file(const char *path)
+{
+  FILE *file;
+  char *text;
+  size_t offset, size;
+
+  file = fopen(path, "r");
+  if (file == NULL) {
+    snprintf(s_errorbuf, sizeof(s_errorbuf),
+             "Unable to open file %s: %s\n",
+             path, strerror(errno));
+    return NULL;
+  }
+
+  fseek(file, 0, SEEK_END);
+  size = ftell(file);
+  fseek(file, 0, SEEK_SET);
+
+  text = xmalloc(size + 1);
+  offset = 0;
+  while (offset < size) {
+    offset += fread(text + offset, 1, size - offset, file);
+  }
+
+  fclose(file);
+  text[offset] = 0;
+  return text;
+}
+
+static unsigned long get_lineno(const char *text, const char *offset)
+{
+  unsigned int lineno = 1;
+
+  for (; text < offset; text++) {
+    if (*text == '\n') {
+      lineno++;
+    }
+  }
+
+  return lineno;
+}
+
+#define LOAD_VALUE(obj, cfg, name)\
+{\
+  cJSON *item;\
+  if ((item = cJSON_GetObjectItem(obj, #name))) {\
+    if (!cJSON_IsNumber(item)) {\
+      snprintf(s_errorbuf, sizeof(s_errorbuf),\
+               "Attribute '%s' is not a number",\
+               #name);\
+      cJSON_Delete(json);\
+      free_config_list(cl);\
+      return s_errorbuf;\
+    }\
+    cfg->name = item->valuedouble;\
+  }\
+}
+
+#define VERIFY_RANGE(cfg, name)\
+{\
+  if (cfg->min_##name >= cfg->max_##name) {\
+    snprintf(s_errorbuf, sizeof(s_errorbuf),\
+             "min_" #name " is greater or equal to max_" #name);\
+    cJSON_Delete(json);\
+    free_config_list(cl);\
+    return s_errorbuf;\
+  }\
+}
+
+const char *load_config_list(const char *path, struct config_list *cl)
+{
+  char *text;
+  cJSON *json;
+  
+  text = load_file(path);
+  if (text == NULL) {
+    return s_errorbuf;
+  }
+
+  json = cJSON_Parse(text);
+  if (json == NULL) {
+    const char *offset = cJSON_GetErrorPtr();
+    unsigned int lineno = get_lineno(text, offset);
+    free(text);
+    snprintf(s_errorbuf, sizeof(s_errorbuf),
+             "Config parse error on line %d", lineno);
+    return s_errorbuf;
+  }
+  free(text);
+
+  if (!cJSON_IsArray(json)) {
+    cJSON_Delete(json);
+    return "Config file is not an array";
+  }
+
+  cl->size = cJSON_GetArraySize(json);
+  cl->cfgs = xmalloc(sizeof(*cl->cfgs) * cl->size);
+
+  for (size_t i = 0; i < cl->size; ++i) {
+    struct config *cfg = &cl->cfgs[i];
+    cJSON *entry = cJSON_GetArrayItem(json, i);
+    default_config(cfg);
+
+    if (!cJSON_IsObject(entry)) {
+      cJSON_Delete(json);
+      free_config_list(cl);
+      snprintf(s_errorbuf, sizeof(s_errorbuf),
+               "Config entry %zu is not an object",
+               i);
+      return s_errorbuf;
+    }
+
+    LOAD_VALUE(entry, cfg, level);
+    LOAD_VALUE(entry, cfg, min_offset);
+    LOAD_VALUE(entry, cfg, max_offset);
+    LOAD_VALUE(entry, cfg, min_length);
+    LOAD_VALUE(entry, cfg, max_length);
+    LOAD_VALUE(entry, cfg, min_cooldown);
+    LOAD_VALUE(entry, cfg, max_cooldown);
+    LOAD_VALUE(entry, cfg, min_gain);
+    LOAD_VALUE(entry, cfg, max_gain);
+    LOAD_VALUE(entry, cfg, min_multiplier);
+    LOAD_VALUE(entry, cfg, max_multiplier);
+    LOAD_VALUE(entry, cfg, reverse_probability);
+    LOAD_VALUE(entry, cfg, num_slots);
+
+    VERIFY_RANGE(cfg, offset);
+    VERIFY_RANGE(cfg, length);
+    VERIFY_RANGE(cfg, cooldown);
+    VERIFY_RANGE(cfg, gain);
+    VERIFY_RANGE(cfg, multiplier);
+  }
+
+  cJSON_Delete(json);
+
+  return NULL;
+}
+
+void free_config_list(struct config_list *cl)
+{
+  free(cl->cfgs);
+  memset(cl, 0, sizeof(*cl));
+}
