@@ -26,7 +26,7 @@ static void switch_config(struct synthesizer *syn, struct config_list *cl)
   }
 
   lock_synthesizer(syn);
-  set_synthesizer_config(syn, &cl->cfgs[s_current_config_index]);
+  set_synthesizer_config(syn, &cl->cfgs[s_current_config_index], 0);
   unlock_synthesizer(syn);
 }
 
@@ -174,9 +174,7 @@ int main(int argc, char **argv)
   free_list(l);
 
   struct synthesizer *syn = create_synthesizer(&af);
-
-  /* Important: set initial configuration */
-  set_synthesizer_config(syn, &cl.cfgs[s_current_config_index]);
+  set_synthesizer_config(syn, &cl.cfgs[s_current_config_index], 1);
 
   if (start_streams(syn) < 0) {
     err = get_audio_error_string();

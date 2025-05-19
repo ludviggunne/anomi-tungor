@@ -1,9 +1,12 @@
+#include <string.h>
 #include <math.h>
 #include <pthread.h>
 
 #include "log.h"
 #include "xmalloc.h"
 #include "synthesizer.h"
+
+static const float s_interp_length = 4.f;
 
 struct slot {
   unsigned int     offset;
@@ -17,17 +20,21 @@ struct slot {
 
 struct synthesizer {
   struct audio_file    *af;
-  struct config        *cfg;
+  struct config        cfg;
+  struct config        target_cfg;
+  struct config        source_cfg;
 
   struct slot          *slots;
   size_t                num_slots;
   size_t                slots_capac;
 
   pthread_mutex_t       lock;
-  size_t                fcursor;   /* Offset within audio file */
+  size_t                fcursor;           /* Offset within audio file */
 
-  float                *data;      /* Synthesized samples */
+  float                *data;              /* Synthesized samples */
   size_t                data_size;
+
+  unsigned int          interp_counter;    /* Counter used for inteprolating between configurations */
 };
 
 struct synthesizer *create_synthesizer(struct audio_file *audio)
@@ -37,7 +44,6 @@ struct synthesizer *create_synthesizer(struct audio_file *audio)
   
   syn = xcalloc(1, sizeof(*syn));
   syn->af = audio;
-  syn->cfg = NULL;
 
   syn->num_slots = 0;
   syn->slots_capac = syn->num_slots;
@@ -57,9 +63,15 @@ void free_synthesizer(struct synthesizer *syn)
   free(syn->slots);
 }
 
-void set_synthesizer_config(struct synthesizer *syn, struct config *cfg)
+void set_synthesizer_config(struct synthesizer *syn, struct config *cfg, int set_now)
 {
-  syn->cfg = cfg;
+  if (set_now) {
+    memcpy(&syn->cfg, cfg, sizeof(struct config));
+  } else {
+    memcpy(&syn->target_cfg, cfg, sizeof(struct config));
+    memcpy(&syn->source_cfg, &syn->cfg, sizeof(struct config));
+    syn->interp_counter = (unsigned int) (syn->af->samplerate * (float) s_interp_length);
+  }
 }
 
 /* Generate a random integer within a range */
@@ -78,40 +90,37 @@ static void init_slot(struct synthesizer *syn, struct slot *slot)
 {
   /* Generate a random grain based on configuration */
 
-  slot->cooldown   = randr((unsigned int) (syn->cfg->min_cooldown * syn->af->samplerate),   (unsigned int) (syn->cfg->max_cooldown * syn->af->samplerate));
+  slot->cooldown   = randr((unsigned int) (syn->cfg.min_cooldown * syn->af->samplerate),   (unsigned int) (syn->cfg.max_cooldown * syn->af->samplerate));
 
   /* The offset is converted to an absolute offset within the file */
-  slot->offset     = randr((unsigned int) (syn->cfg->min_offset * syn->af->samplerate),     (unsigned int) (syn->cfg->max_offset * syn->af->samplerate));
+  slot->offset     = randr((unsigned int) (syn->cfg.min_offset * syn->af->samplerate),     (unsigned int) (syn->cfg.max_offset * syn->af->samplerate));
   slot->offset     = (syn->af->size + syn->fcursor - slot->offset) % syn->af->size;
 
-  slot->length     = randr((unsigned int) (syn->cfg->min_length * syn->af->samplerate),     (unsigned int) (syn->cfg->max_length * syn->af->samplerate));
+  slot->length     = randr((unsigned int) (syn->cfg.min_length * syn->af->samplerate),     (unsigned int) (syn->cfg.max_length * syn->af->samplerate));
 
-  slot->gain       = randf(syn->cfg->min_gain, syn->cfg->max_gain);
-  slot->multiplier = randf(syn->cfg->min_multiplier, syn->cfg->max_multiplier);
-  slot->reverse    = randf(0.f, 1.f) < syn->cfg->reverse_probability;
+  slot->gain       = randf(syn->cfg.min_gain, syn->cfg.max_gain);
+  slot->multiplier = randf(syn->cfg.min_multiplier, syn->cfg.max_multiplier);
+  slot->reverse    = randf(0.f, 1.f) < syn->cfg.reverse_probability;
 
   slot->cursor     = 0;
 }
 
 void synthesize(struct synthesizer *syn, size_t length)
 {
-  if (syn->cfg->num_slots > syn->slots_capac) {
-    log_info("Making room for %d slots", syn->cfg->num_slots);
-    syn->slots = xrealloc(syn->slots, sizeof(*syn->slots) * syn->cfg->num_slots);
-    syn->slots_capac = syn->cfg->num_slots;
+  if (syn->cfg.num_slots > syn->slots_capac) {
+    syn->slots = xrealloc(syn->slots, sizeof(*syn->slots) * syn->cfg.num_slots);
+    syn->slots_capac = syn->cfg.num_slots;
   }
 
-  if (syn->cfg->num_slots > syn->num_slots) {
-    log_info("Initializing %d new slots", syn->cfg->num_slots - syn->num_slots);
-    for (unsigned int i = syn->num_slots; i < syn->cfg->num_slots; ++i) {
+  if (syn->cfg.num_slots > syn->num_slots) {
+    for (unsigned int i = syn->num_slots; i < syn->cfg.num_slots; ++i) {
       init_slot(syn, &syn->slots[i]);
     }
   }
 
-  syn->num_slots = syn->cfg->num_slots;
+  syn->num_slots = syn->cfg.num_slots;
 
   if (length > syn->data_size) {
-    log_info("Growing synthesizer buffer to %d samples", length);
     syn->data = xrealloc(syn->data, sizeof(*syn->data) * length);
     syn->data_size = length;
   }
@@ -119,6 +128,7 @@ void synthesize(struct synthesizer *syn, size_t length)
   for (size_t i = 0; i < length; ++i) {
 
     float sample = 0.f;
+    float cfg_interp = 1.f - (float) syn->interp_counter / (s_interp_length * (float) syn->af->samplerate);
 
     for (unsigned int i = 0; i < syn->slots_capac; ++i) {
 
@@ -176,6 +186,25 @@ void synthesize(struct synthesizer *syn, size_t length)
     }
 
     syn->data[i] = sample;
+
+    /* Interpolate between configurations */
+    if (syn->interp_counter) {
+
+      syn->interp_counter--;
+
+      syn->cfg.num_slots = (unsigned int) ((float) syn->source_cfg.num_slots + cfg_interp * ((float) syn->target_cfg.num_slots - (float) syn->source_cfg.num_slots));
+      syn->cfg.min_offset = syn->source_cfg.min_offset + cfg_interp * (syn->target_cfg.min_offset - syn->source_cfg.min_offset);
+      syn->cfg.max_offset = syn->source_cfg.max_offset + cfg_interp * (syn->target_cfg.max_offset - syn->source_cfg.max_offset);
+      syn->cfg.min_length = syn->source_cfg.min_length + cfg_interp * (syn->target_cfg.min_length - syn->source_cfg.min_length);
+      syn->cfg.max_length = syn->source_cfg.max_length + cfg_interp * (syn->target_cfg.max_length - syn->source_cfg.max_length);
+      syn->cfg.min_cooldown = syn->source_cfg.min_cooldown + cfg_interp * (syn->target_cfg.min_cooldown - syn->source_cfg.min_cooldown);
+      syn->cfg.max_cooldown = syn->source_cfg.max_cooldown + cfg_interp * (syn->target_cfg.max_cooldown - syn->source_cfg.max_cooldown);
+      syn->cfg.min_multiplier = syn->source_cfg.min_multiplier + cfg_interp * (syn->target_cfg.min_multiplier - syn->source_cfg.min_multiplier);
+      syn->cfg.max_multiplier = syn->source_cfg.max_multiplier + cfg_interp * (syn->target_cfg.max_multiplier - syn->source_cfg.max_multiplier);
+      syn->cfg.min_gain = syn->source_cfg.min_gain + cfg_interp * (syn->target_cfg.min_gain - syn->source_cfg.min_gain);
+      syn->cfg.max_gain = syn->source_cfg.max_gain + cfg_interp * (syn->target_cfg.max_gain - syn->source_cfg.max_gain);
+      syn->cfg.reverse_probability = syn->source_cfg.reverse_probability + cfg_interp * (syn->target_cfg.reverse_probability - syn->source_cfg.reverse_probability);
+    }
   }
 }
 

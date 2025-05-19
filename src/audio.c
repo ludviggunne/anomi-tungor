@@ -60,6 +60,22 @@ static void context_connect_callback(pa_context *context, void *userdata)
   }
 }
 
+static void cleanup(void)
+{
+  /* TODO: syncing */
+
+  if (s_record_stream) {
+    pa_stream_disconnect(s_record_stream);
+  }
+
+  if (s_playback_stream) {
+    pa_stream_disconnect(s_playback_stream);
+  }
+
+  pa_context_disconnect(s_context);
+  pa_threaded_mainloop_stop(s_mainloop);
+}
+
 int init_audio(void)
 {
   /* Start mainloop */
@@ -90,6 +106,8 @@ int init_audio(void)
   } else {
     s_default_sample_spec.format = PA_SAMPLE_FLOAT32BE;
   }
+
+  atexit(cleanup);
 
   return 0;
 }
