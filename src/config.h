@@ -4,6 +4,7 @@
 #include <stddef.h>
 
 struct config {
+  char          *name;
   float          level;
   float          min_offset;
   float          max_offset;

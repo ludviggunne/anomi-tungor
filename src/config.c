@@ -12,6 +12,7 @@ static char s_errorbuf[512] = {0};
 
 static void default_config(struct config *cfg)
 {
+  cfg->name                = NULL;
   cfg->level               = 0.f;
   cfg->min_offset          = .01f;
   cfg->max_offset          = 2.f;
@@ -99,6 +100,7 @@ static unsigned long get_lineno(const char *text, const char *offset)
 static void warn_on_unknown_keys(cJSON *obj)
 {
   static const char *keys[] = {
+    "name",
     "level",
     "min_offset",
     "max_offset",
@@ -172,6 +174,20 @@ const char *load_config_list(const char *path, struct config_list *cl)
                "Config entry %zu is not an object",
                i);
       return s_errorbuf;
+    }
+
+    cJSON *item;
+    if ((item = cJSON_GetObjectItem(entry, "name"))) {
+      if (!cJSON_IsString(item)) {
+        snprintf(s_errorbuf, sizeof(s_errorbuf),
+                 "Attribute 'name' is not a string");
+        cJSON_Delete(json);
+        free_config_list(cl);
+        return s_errorbuf;
+      }
+
+      free(cfg->name);
+      cfg->name = strdup(item->valuestring);
     }
 
     LOAD_VALUE(entry, cfg, level);

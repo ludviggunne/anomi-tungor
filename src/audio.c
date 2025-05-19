@@ -28,9 +28,9 @@ static struct list *s_list;
 
 static pa_sample_spec s_default_sample_spec;
 
-static void cleanup(void)
-{
-}
+// static void cleanup(void)
+// {
+// }
 
 static int is_litte_endian_system(void)
 {

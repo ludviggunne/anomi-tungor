@@ -15,7 +15,14 @@ static float s_current_volume = 0.f;
 
 static void switch_config(struct synthesizer *syn, struct config_list *cl)
 {
-  log_info("Switching to config %zu", s_current_config_index);
+  struct config *cfg = &cl->cfgs[s_current_config_index];
+
+  if (cfg->name) {
+    log_info("Switching to config %zu (%s)", s_current_config_index, cfg->name);
+  } else {
+    log_info("Switching to config %zu", s_current_config_index);
+  }
+
   lock_synthesizer(syn);
   set_synthesizer_config(syn, &cl->cfgs[s_current_config_index]);
   unlock_synthesizer(syn);
@@ -24,13 +31,15 @@ static void switch_config(struct synthesizer *syn, struct config_list *cl)
 static void help(void)
 {
   log_info("Key mappings:");
-  log_info("    q - Quit");
-  log_info("    a - Toggle auto config mode");
-  log_info("    j - Go down config list");
-  log_info("    k - Go up config list");
-  log_info("    c - Print config number");
-  log_info("    v - Print volume");
-  log_info("    f - Print this help message");
+  log_info("    q       Quit");
+  log_info("    a       Toggle auto config mode");
+  log_info("    l       List config entries");
+  log_info("    j       Go down config list");
+  log_info("    k       Go up config list");
+  log_info("    c       Print config number");
+  log_info("    v       Print volume");
+  log_info("    h       Print this help message");
+  log_info("    0-9     Select config by index");
 }
 
 int main(int argc, char **argv)
@@ -213,14 +222,51 @@ int main(int argc, char **argv)
           break;
 
         case 'c':
-          log_info("Current config: %d", s_current_config_index);
+        {
+          struct config *cfg = &cl.cfgs[s_current_config_index];
+          if (cfg->name) {
+            log_info("Current config: %zu (%s)", s_current_config_index, cfg->name);
+          } else {
+            log_info("Current config: %zu", s_current_config_index);
+          }
           break;
+        }
+
+        case 'l':
+        {
+          for (size_t i = 0; i < cl.size; ++i) {
+            struct config *cfg = &cl.cfgs[i];
+            char sel = i == s_current_config_index ? '*' : ' ';
+            if (cfg->name) {
+              log_info("    %c %zu: %s", sel, i, cfg->name);
+            } else {
+              log_info("    %c %zu", sel, i);
+            }
+          }
+          break;
+        }
 
         case 'h':
           help();
           break;
 
         default:
+          if (s_auto_config) {
+            break;
+          }
+
+          if ('0' <= ev.c && ev.c <= '9') {
+            size_t index = ev.c - '0';
+
+            if (index >= cl.size) {
+              log_err("No config with index %zu", index);
+              break;
+            }
+
+            s_current_config_index = index;
+            switch_config(syn, &cl);
+            break;
+          }
           break;
         }
         break;

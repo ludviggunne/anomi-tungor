@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <sndfile.h>
 
+#include "log.h"
 #include "xmalloc.h"
 #include "audio-file.h"
 
@@ -31,7 +32,8 @@ const char *load_audio_file(const char *path, struct audio_file *af)
   sf_close(file);
 
   if (af->channels > 1) {
-    for (size_t i = 0; i < af->size; ++i) {
+    log_info("Audio file has %d channels, mixing them in to one", af->channels);
+    for (size_t i = 0; i < af->size / af->channels; ++i) {
       float a = 0.f;
       for (size_t c = 0; c < af->channels; ++c) {
         a += af->data[af->channels * i + c];

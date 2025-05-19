@@ -13,7 +13,7 @@ struct list *list_select(struct list *l)
   const char *c = s_chars;
 
   for (; it && c; it = it->next, c++) {
-    log_info("    %c: %s: %s (%d)", *c, it->description, it->name, it->index);
+    log_info("    \x1b[34m%c\x1b[0m: %s: %s (%d)", *c, it->description, it->name, it->index);
   }
 
   const char *sel;
