@@ -20,9 +20,17 @@ struct event_queue {
 };
 
 static struct pollfd s_pollfds[3];
+
+/* eventfd() is used for custom events so they can
+ * be handled by poll() */
 static int s_eventfd;
+
+/* Event queue */
 static struct event_queue *s_queue_front = NULL;
 static struct event_queue *s_queue_back = NULL;
+
+/* Guard the event queue since it's accessed
+ * by the threaded PulseAudio mainloop */
 static pthread_mutex_t s_lock;
 
 static void cleanup(void)
@@ -33,14 +41,23 @@ static void cleanup(void)
 const char *event_loop_start(const char *watch_path)
 {
   const char *err;
+
+  /* Set terminal raw mode so we can read characters
+   * without echoing and without pressing enter */
   term_set_raw();
+
+  /* Start watching the configuration file for
+   * live updates */
   err = start_file_watch(watch_path);
   if (err != NULL) {
     return err;
   }
 
+  /* Set EFD_SEMAPHORE so eventfd counter matches
+   * length of event queue */
   s_eventfd = eventfd(0, EFD_SEMAPHORE);
 
+  /* Set file descriptors to poll */
   s_pollfds[0].fd = get_watch_descriptor();
   s_pollfds[0].events = POLLIN;
   s_pollfds[1].fd = STDIN_FILENO;
@@ -61,7 +78,10 @@ struct event event_loop_poll(void)
 
   if (s_pollfds[0].revents & POLLIN) {
     event.type = EVENT_WATCH;
+
+    /* Discard the contents of the inotify event */
     consume_watch_event();
+
     return event;
   }
 
@@ -76,12 +96,14 @@ struct event event_loop_poll(void)
 
     assert(s_queue_front && "trying to read eventfd with no events in queue");
 
+    /* Discard the eventfd counter value */
     uint64_t event_value;
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-result"
     (void) read(s_eventfd, &event_value, sizeof(event_value));
 #pragma GCC diagnostic pop
 
+    /* Pop event from queue */
     memcpy(&event, &s_queue_front->event, sizeof(struct event));
     struct event_queue *prev = s_queue_front->prev;
     free(s_queue_front);
@@ -114,6 +136,8 @@ void queue_event(struct event *event)
     s_queue_back = eq;
   }
 
+  /* Update eventfd counter so the event is
+   * detected in the poll() call */
   uint64_t event_value = 1;
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-result"

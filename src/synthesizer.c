@@ -17,16 +17,16 @@ struct slot {
 
 struct synthesizer {
   struct audio_file    *af;
-  struct config *       cfg;
+  struct config        *cfg;
 
-  struct slot *         slots;
+  struct slot          *slots;
   size_t                num_slots;
   size_t                slots_capac;
 
   pthread_mutex_t       lock;
-  size_t                fcursor;
+  size_t                fcursor;   /* Offset within audio file */
 
-  float                *data;
+  float                *data;      /* Synthesized samples */
   size_t                data_size;
 };
 
@@ -62,11 +62,13 @@ void set_synthesizer_config(struct synthesizer *syn, struct config *cfg)
   syn->cfg = cfg;
 }
 
+/* Generate a random integer within a range */
 static unsigned int randr(unsigned int min, unsigned int max)
 {
   return min + rand() % (max - min);
 }
 
+/* Generate a random float within a range */
 static float randf(float min, float max)
 {
   return min + (max - min) * (float) rand() / (float) RAND_MAX;
@@ -74,13 +76,20 @@ static float randf(float min, float max)
 
 static void init_slot(struct synthesizer *syn, struct slot *slot)
 {
+  /* Generate a random grain based on configuration */
+
   slot->cooldown   = randr((unsigned int) (syn->cfg->min_cooldown * syn->af->samplerate),   (unsigned int) (syn->cfg->max_cooldown * syn->af->samplerate));
+
+  /* The offset is converted to an absolute offset within the file */
   slot->offset     = randr((unsigned int) (syn->cfg->min_offset * syn->af->samplerate),     (unsigned int) (syn->cfg->max_offset * syn->af->samplerate));
   slot->offset     = (syn->af->size + syn->fcursor - slot->offset) % syn->af->size;
+
   slot->length     = randr((unsigned int) (syn->cfg->min_length * syn->af->samplerate),     (unsigned int) (syn->cfg->max_length * syn->af->samplerate));
+
   slot->gain       = randf(syn->cfg->min_gain, syn->cfg->max_gain);
   slot->multiplier = randf(syn->cfg->min_multiplier, syn->cfg->max_multiplier);
   slot->reverse    = randf(0.f, 1.f) < syn->cfg->reverse_probability;
+
   slot->cursor     = 0;
 }
 
@@ -115,14 +124,19 @@ void synthesize(struct synthesizer *syn, size_t length)
 
       struct slot *s = &syn->slots[i];
 
+      /* Cooldown mode while cooldown is non-zero */
       if (s->cooldown) {
-        if (i >= syn->num_slots)
+        if (i >= syn->num_slots) {
+          /* If this grain is supposed to die,
+           * don't decrement cooldown counter */
           continue;
+        }
         s->cooldown--;
         continue;
       }
 
       if (s->cursor == s->length) {
+        /* Grain finished playing, create a new one */
         init_slot(syn, s);
         continue;
       }
@@ -132,10 +146,12 @@ void synthesize(struct synthesizer *syn, size_t length)
         cursor = s->length - cursor;
       }
 
+      /* Scale cursor by multiplier */
       float fcursor;
       float interp = modff(s->multiplier * (float) cursor, &fcursor);
       cursor = (unsigned int) fcursor;
 
+      /* Interpolate sample based on fractional part after scaling */
       unsigned int lpos = (syn->af->size + s->offset + cursor) % syn->af->size;
       unsigned int rpos = (lpos + 1) % syn->af->size;
 
@@ -144,9 +160,11 @@ void synthesize(struct synthesizer *syn, size_t length)
 
       float af_sample = lsample + (rsample - lsample) * interp;
 
+      /* Compute envelope */
       float t = (float) s->cursor / (float) s->length;
       float env = 1.f - (2.f * t - 1.f) * (2.f * t - 1.f);
 
+      /* Accumulate sample */
       sample += af_sample * env * s->gain;
       s->cursor++;
     }

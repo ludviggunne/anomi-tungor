@@ -9,6 +9,8 @@
 #include "log.h"
 #include "synthesizer.h"
 
+/* Reload set the configuration automatically
+ * by matching volume with 'level' field */
 static int s_auto_config = 0;
 static size_t s_current_config_index = 0;
 static float s_current_volume = 0.f;
@@ -52,6 +54,7 @@ int main(int argc, char **argv)
   const char *audio_path = NULL;
   const char *config_path = NULL;
 
+  /* Parse command line arguments */
   for (argv++; *argv; ++argv) {
     const char *arg = *argv;
 
@@ -109,14 +112,16 @@ int main(int argc, char **argv)
     return -1;
   }
 
+  /* Load configuration */
   struct config_list cl;
   err = load_config_list(config_path, &cl);
   if (err != NULL) {
     log_err("Failed to load config %s: %s", config_path, err);
     return -1;
   }
-  log_info("Config %s loaded", config_path);
+  log_info("Configuration: %s", config_path);
 
+  /* Load audio file */
   struct audio_file af;
   err = load_audio_file(audio_path, &af);
   if (err != NULL) {
@@ -124,26 +129,27 @@ int main(int argc, char **argv)
     return -1;
   }
 
-  log_info("Input file:  %s", audio_path);
-  log_info("Channels:    %d", af.channels);
-  log_info("Sample rate: %d", af.samplerate);
+  log_info("Input file:    %s", audio_path);
+  log_info("Channels:      %d", af.channels);
+  log_info("Sample rate:   %d", af.samplerate);
 
   err = event_loop_start(config_path);
   if (err != NULL) {
     log_err("Failed to start event loop: %s", err);
     return -1;
   }
-  log_info("Event loop started");
 
   if (init_audio() < 0) {
     err = get_audio_error_string();
     log_err("Failed to initalize audio: %s", err);
     return -1;
   }
-  log_info("Audio backend initialized");
 
+  /* Match the streams settings with the audio file,
+   * (sample rate and number of channels) */
   match_audio_file_sample_spec(&af);
 
+  /* Let the user select a sink... */
   struct list *l = list_sinks();
   log_info("Select sink:");
   struct list *sink = list_select(l);
@@ -153,9 +159,9 @@ int main(int argc, char **argv)
     log_err("%s", err);
     return -1;
   }
-  log_info("Connected to sink %s", sink->name);
   free_list(l);
 
+  /* ...and source */
   l = list_sources();
   log_info("Select source:");
   struct list *source = list_select(l);
@@ -165,10 +171,11 @@ int main(int argc, char **argv)
     log_err("%s", err);
     return -1;
   }
-  log_info("Connected to source %s", source->name);
   free_list(l);
 
   struct synthesizer *syn = create_synthesizer(&af);
+
+  /* Important: set initial configuration */
   set_synthesizer_config(syn, &cl.cfgs[s_current_config_index]);
 
   if (start_streams(syn) < 0) {
@@ -176,13 +183,13 @@ int main(int argc, char **argv)
     log_err("%s", err);
     return -1;
   }
-  log_info("Started recording");
 
   quit = 0;
   struct config_list new_cl;
   while (!quit) {
     struct event ev = event_loop_poll();
 
+    /* Poll events */
     switch (ev.type) {
       case EVENT_INPUT:
 
@@ -199,11 +206,13 @@ int main(int argc, char **argv)
           break;
 
         case 'a':
+          /* Toggle auto config */
           s_auto_config = !s_auto_config;
           log_info("Auto-config: %s", s_auto_config ? "on" : "off");
           break;
 
         case 'j':
+          /* Decrement config index */
           if (s_auto_config || s_current_config_index == 0)
             break;
           s_current_config_index--;
@@ -211,6 +220,7 @@ int main(int argc, char **argv)
           break;
 
         case 'k':
+          /* Increment config index */
           if (s_auto_config || s_current_config_index == cl.size - 1)
             break;
           s_current_config_index++;
@@ -251,11 +261,13 @@ int main(int argc, char **argv)
           break;
 
         default:
-          if (s_auto_config) {
-            break;
-          }
-
           if ('0' <= ev.c && ev.c <= '9') {
+            if (s_auto_config) {
+              /* Don't allow manual config selection 
+               * if auto-config is set */
+              break;
+            }
+
             size_t index = ev.c - '0';
 
             if (index >= cl.size) {
@@ -272,6 +284,8 @@ int main(int argc, char **argv)
         break;
 
       case EVENT_WATCH:
+
+        /* Configuration file is modified */
         err = load_config_list(config_path, &new_cl);
 
         if (err != NULL) {
@@ -296,6 +310,9 @@ int main(int argc, char **argv)
 
         if (!s_auto_config)
           break;
+
+        /* Select configuration based on volume if
+         * auto-config is set */
 
         size_t i;
         for (i = 0; i < cl.size - 1; ++i) {

@@ -4,6 +4,7 @@
 
 #include "log.h"
 
+/* Some ANSI escape codes for terminal colors */
 __attribute__((unused))
 static const char *s_red   = "\x1b[31m";
 __attribute__((unused))

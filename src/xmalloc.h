@@ -4,6 +4,9 @@
 #include <stdlib.h>
 #include <stdio.h>
 
+/* Some stdlib wrappers tht just crash
+ * on OOM */
+
 static inline void *xmalloc(size_t size)
 {
   void *ptr = malloc(size);

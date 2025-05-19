@@ -12,6 +12,11 @@ static char s_errorbuf[512] = {0};
 
 static void default_config(struct config *cfg)
 {
+
+  /* Default configuration. Any field that is not
+   * specified in the configuration file is filled
+   * in with a value from here */
+
   cfg->name                = NULL;
   cfg->level               = 0.f;
   cfg->min_offset          = .01f;
@@ -28,6 +33,7 @@ static void default_config(struct config *cfg)
   cfg->num_slots           = 8;
 }
 
+/* Just load a text file in to a string */
 static char *load_file(const char *path)
 {
   FILE *file;
@@ -57,6 +63,8 @@ static char *load_file(const char *path)
   return text;
 }
 
+
+/* Compute the line number for parse errors */
 static unsigned long get_lineno(const char *text, const char *offset)
 {
   unsigned int lineno = 1;
@@ -70,6 +78,7 @@ static unsigned long get_lineno(const char *text, const char *offset)
   return lineno;
 }
 
+/* Convenience macro for loading a configuration value */
 #define LOAD_VALUE(obj, cfg, name)\
 {\
   cJSON *item;\
@@ -86,6 +95,7 @@ static unsigned long get_lineno(const char *text, const char *offset)
   }\
 }
 
+/* Verify that min/max values are valid */
 #define VERIFY_RANGE(cfg, name)\
 {\
   if (cfg->min_##name >= cfg->max_##name) {\
@@ -138,11 +148,13 @@ const char *load_config_list(const char *path, struct config_list *cl)
   char *text;
   cJSON *json;
   
+  /* Load text */
   text = load_file(path);
   if (text == NULL) {
     return s_errorbuf;
   }
 
+  /* Parse JSON */
   json = cJSON_Parse(text);
   if (json == NULL) {
     const char *offset = cJSON_GetErrorPtr();
@@ -162,9 +174,12 @@ const char *load_config_list(const char *path, struct config_list *cl)
   cl->size = cJSON_GetArraySize(json);
   cl->cfgs = xmalloc(sizeof(*cl->cfgs) * cl->size);
 
+  /* Load all configurations */
   for (size_t i = 0; i < cl->size; ++i) {
     struct config *cfg = &cl->cfgs[i];
     cJSON *entry = cJSON_GetArrayItem(json, i);
+
+    /* Fill in default values */
     default_config(cfg);
 
     if (!cJSON_IsObject(entry)) {
@@ -190,6 +205,7 @@ const char *load_config_list(const char *path, struct config_list *cl)
       cfg->name = strdup(item->valuestring);
     }
 
+    /* Load values */
     LOAD_VALUE(entry, cfg, level);
     LOAD_VALUE(entry, cfg, min_offset);
     LOAD_VALUE(entry, cfg, max_offset);
@@ -204,6 +220,7 @@ const char *load_config_list(const char *path, struct config_list *cl)
     LOAD_VALUE(entry, cfg, reverse_probability);
     LOAD_VALUE(entry, cfg, num_slots);
 
+    /* Verify min/max values */
     VERIFY_RANGE(cfg, offset);
     VERIFY_RANGE(cfg, length);
     VERIFY_RANGE(cfg, cooldown);
