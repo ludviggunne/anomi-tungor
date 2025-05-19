@@ -162,7 +162,8 @@ void synthesize(struct synthesizer *syn, size_t length)
 
       /* Compute envelope */
       float t = (float) s->cursor / (float) s->length;
-      float env = 1.f - (2.f * t - 1.f) * (2.f * t - 1.f);
+      // float env = 1.f - (2.f * t - 1.f) * (2.f * t - 1.f);
+      float env = t < .25f ? 4.f * t : 4.f * (1.f - t) / 3.f;
 
       /* Accumulate sample */
       sample += af_sample * env * s->gain;
