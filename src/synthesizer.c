@@ -175,8 +175,16 @@ void synthesize(struct synthesizer *syn, size_t length)
       // float env = 1.f - (2.f * t - 1.f) * (2.f * t - 1.f);
       float env = t < .25f ? 4.f * t : 4.f * (1.f - t) / 3.f;
 
+      /* Scale new/old slots based on configuration interpolation */
+      float cfg_scaling = 1.f;
+      if (syn->source_cfg.num_slots < syn->target_cfg.num_slots && i > syn->source_cfg.num_slots) {
+        cfg_scaling = cfg_interp;
+      } else if (syn->source_cfg.num_slots > syn->target_cfg.num_slots && i > syn->target_cfg.num_slots) {
+        cfg_scaling = 1.f - cfg_interp;
+      }
+
       /* Accumulate sample */
-      sample += af_sample * env * s->gain;
+      sample += af_sample * env * s->gain * cfg_scaling;
       s->cursor++;
     }
 
