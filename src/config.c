@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <cjson/cJSON.h>
 
+#include "log.h"
 #include "xmalloc.h"
 #include "config.h"
 
@@ -20,8 +21,8 @@ static void default_config(struct config *cfg)
   cfg->max_cooldown        = 2.f;
   cfg->min_gain            = 0.01f;
   cfg->max_gain            = 1.f;
-  cfg->min_multiplier      = 1.f;
-  cfg->max_multiplier      = 3.f / 2.f;
+  cfg->min_multiplier      = 0.8408964152537144;
+  cfg->max_multiplier      = 1.1892071150027212f;
   cfg->reverse_probability = .1f;
   cfg->num_slots           = 8;
 }
@@ -95,6 +96,41 @@ static unsigned long get_lineno(const char *text, const char *offset)
   }\
 }
 
+static void warn_on_unknown_keys(cJSON *obj)
+{
+  static const char *keys[] = {
+    "level",
+    "min_offset",
+    "max_offset",
+    "min_length",
+    "max_length",
+    "min_cooldown",
+    "max_cooldown",
+    "min_gain",
+    "max_gain",
+    "min_multiplier",
+    "max_multiplier",
+    "reverse_probability",
+    "num_slots",
+    NULL,
+  };
+
+  obj = obj->child;
+
+  for (; obj; obj = obj->next) {
+    int known = 0;
+    for (const char **key = keys; *key; ++key) {
+      if (strcmp(*key, obj->string) == 0) {
+        known = 1;
+        break;
+      }
+    }
+    if (!known) {
+      log_warn("Unknown config key: %s", obj->string);
+    }
+  }
+}
+
 const char *load_config_list(const char *path, struct config_list *cl)
 {
   char *text;
@@ -157,6 +193,8 @@ const char *load_config_list(const char *path, struct config_list *cl)
     VERIFY_RANGE(cfg, cooldown);
     VERIFY_RANGE(cfg, gain);
     VERIFY_RANGE(cfg, multiplier);
+
+    warn_on_unknown_keys(entry);
   }
 
   cJSON_Delete(json);

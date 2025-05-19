@@ -9,9 +9,9 @@ struct slot {
   unsigned int     offset;
   unsigned int     length;
   unsigned int     cooldown;
-  unsigned int     multiplier;
   unsigned int     cursor;
   float            gain;
+  float            multiplier;
   int              reverse;
 };
 
@@ -76,9 +76,10 @@ static void init_slot(struct synthesizer *syn, struct slot *slot)
 {
   slot->cooldown   = randr((unsigned int) (syn->cfg->min_cooldown * syn->af->samplerate),   (unsigned int) (syn->cfg->max_cooldown * syn->af->samplerate));
   slot->offset     = randr((unsigned int) (syn->cfg->min_offset * syn->af->samplerate),     (unsigned int) (syn->cfg->max_offset * syn->af->samplerate));
+  slot->offset     = (syn->af->size + syn->fcursor - slot->offset) % syn->af->size;
   slot->length     = randr((unsigned int) (syn->cfg->min_length * syn->af->samplerate),     (unsigned int) (syn->cfg->max_length * syn->af->samplerate));
-  slot->multiplier = randr((unsigned int) (syn->cfg->min_multiplier * syn->af->samplerate), (unsigned int) (syn->cfg->max_multiplier * syn->af->samplerate));
   slot->gain       = randf(syn->cfg->min_gain, syn->cfg->max_gain);
+  slot->multiplier = randf(syn->cfg->min_multiplier, syn->cfg->max_multiplier);
   slot->reverse    = randf(0.f, 1.f) < syn->cfg->reverse_probability;
   slot->cursor     = 0;
 }
@@ -126,12 +127,22 @@ void synthesize(struct synthesizer *syn, size_t length)
         continue;
       }
 
-      unsigned int pos = (syn->af->size + syn->fcursor - s->offset) % syn->af->size;
+      unsigned int cursor = s->cursor;
       if (s->reverse) {
-        pos = (pos + syn->af->size + s->length - 2 * s->cursor) % syn->af->size;
+        cursor = s->length - cursor;
       }
 
-      float af_sample = syn->af->data[pos];
+      float fcursor;
+      float interp = modff(s->multiplier * (float) cursor, &fcursor);
+      cursor = (unsigned int) fcursor;
+
+      unsigned int lpos = (syn->af->size + s->offset + cursor) % syn->af->size;
+      unsigned int rpos = (lpos + 1) % syn->af->size;
+
+      float lsample = syn->af->data[lpos];
+      float rsample = syn->af->data[rpos];
+
+      float af_sample = lsample + (rsample - lsample) * interp;
 
       float t = (float) s->cursor / (float) s->length;
       float env = 1.f - (2.f * t - 1.f) * (2.f * t - 1.f);
