@@ -244,13 +244,14 @@ int main(int argc, char **argv)
 
         case 'l':
         {
+          log_info("Loaded configs:");
           for (size_t i = 0; i < cl.size; ++i) {
             struct config *cfg = &cl.cfgs[i];
             char sel = i == s_current_config_index ? '*' : ' ';
             if (cfg->name) {
-              log_info("    %c %zu: %s", sel, i, cfg->name);
+              log_info("  %c %zu: %s", sel, i, cfg->name);
             } else {
-              log_info("    %c %zu", sel, i);
+              log_info("  %c %zu", sel, i);
             }
           }
           break;
