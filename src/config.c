@@ -98,7 +98,7 @@ static unsigned long get_lineno(const char *text, const char *offset)
 /* Verify that min/max values are valid */
 #define VERIFY_RANGE(profile, name)\
 {\
-  if (profile->min_##name >= profile->max_##name) {\
+  if (profile->min_##name > profile->max_##name) {\
     snprintf(s_errorbuf, sizeof(s_errorbuf),\
              "min_" #name " is greater or equal to max_" #name);\
     cJSON_Delete(json);\

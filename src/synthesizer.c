@@ -90,19 +90,37 @@ static void init_slot(struct synthesizer *syn, struct slot *slot)
 {
   /* Generate a random grain based on configuration */
 
-  slot->cooldown   = randr((unsigned int) (syn->profile.min_cooldown * syn->af->samplerate),   (unsigned int) (syn->profile.max_cooldown * syn->af->samplerate));
+  unsigned int max_cooldown = syn->profile.max_cooldown * syn->af->samplerate;
+  unsigned int min_cooldown = syn->profile.min_cooldown * syn->af->samplerate;
+  if (min_cooldown != max_cooldown) {
+    slot->cooldown = randr((unsigned int) (syn->profile.min_cooldown * syn->af->samplerate), (unsigned int) (syn->profile.max_cooldown * syn->af->samplerate));
+  } else {
+    slot->cooldown = min_cooldown;
+  }
 
   /* The offset is converted to an absolute offset within the file */
-  slot->offset     = randr((unsigned int) (syn->profile.min_offset * syn->af->samplerate),     (unsigned int) (syn->profile.max_offset * syn->af->samplerate));
-  slot->offset     = (syn->af->size + syn->fcursor - slot->offset) % syn->af->size;
+  unsigned int max_offset = syn->profile.max_offset * syn->af->samplerate;
+  unsigned int min_offset = syn->profile.min_offset * syn->af->samplerate;
+  if (min_offset != max_offset) {
+    slot->offset = randr((unsigned int) (syn->profile.min_offset * syn->af->samplerate), (unsigned int) (syn->profile.max_offset * syn->af->samplerate));
+  } else {
+    slot->offset = min_offset;
+  }
+  slot->offset = (syn->af->size + syn->fcursor - slot->offset) % syn->af->size;
 
-  slot->length     = randr((unsigned int) (syn->profile.min_length * syn->af->samplerate),     (unsigned int) (syn->profile.max_length * syn->af->samplerate));
+  unsigned int max_length = syn->profile.max_length * syn->af->samplerate;
+  unsigned int min_length = syn->profile.min_length * syn->af->samplerate;
+  if (min_length != max_length) {
+    slot->length = randr((unsigned int) (syn->profile.min_length * syn->af->samplerate), (unsigned int) (syn->profile.max_length * syn->af->samplerate));
+  } else {
+    slot->length = min_length;
+  }
 
-  slot->gain       = randf(syn->profile.min_gain, syn->profile.max_gain);
+  slot->gain = randf(syn->profile.min_gain, syn->profile.max_gain);
   slot->multiplier = randf(syn->profile.min_multiplier, syn->profile.max_multiplier);
-  slot->reverse    = randf(0.f, 1.f) < syn->profile.reverse_probability;
+  slot->reverse = randf(0.f, 1.f) < syn->profile.reverse_probability;
 
-  slot->cursor     = 0;
+  slot->cursor = 0;
 }
 
 void synthesize(struct synthesizer *syn, size_t length)
