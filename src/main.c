@@ -36,7 +36,7 @@ static void help(void)
   log_info("Key mappings:");
   log_info("    q       Quit");
   log_info("    a       Toggle auto profile mode");
-  log_info("    l       List profile entries");
+  log_info("    l       List profiles");
   log_info("    j       Go down profile list");
   log_info("    k       Go up profile list");
   log_info("    p       Print profile number");
@@ -273,7 +273,7 @@ int main(int argc, char **argv)
             size_t index = ev.c - '0';
 
             if (index >= cfg.size) {
-              log_err("No config with index %zu", index);
+              log_err("No profile with index %zu", index);
               break;
             }
 
