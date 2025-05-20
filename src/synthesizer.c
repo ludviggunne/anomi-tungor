@@ -20,9 +20,9 @@ struct slot {
 
 struct synthesizer {
   struct audio_file    *af;
-  struct config        cfg;
-  struct config        target_cfg;
-  struct config        source_cfg;
+  struct profile        profile;
+  struct profile        target_profile;
+  struct profile        source_profile;
 
   struct slot          *slots;
   size_t                num_slots;
@@ -63,13 +63,13 @@ void free_synthesizer(struct synthesizer *syn)
   free(syn->slots);
 }
 
-void set_synthesizer_config(struct synthesizer *syn, struct config *cfg, int set_now)
+void set_synthesizer_profile(struct synthesizer *syn, struct profile *profile, int set_now)
 {
   if (set_now) {
-    memcpy(&syn->cfg, cfg, sizeof(struct config));
+    memcpy(&syn->profile, profile, sizeof(struct profile));
   } else {
-    memcpy(&syn->target_cfg, cfg, sizeof(struct config));
-    memcpy(&syn->source_cfg, &syn->cfg, sizeof(struct config));
+    memcpy(&syn->target_profile, profile, sizeof(struct profile));
+    memcpy(&syn->source_profile, &syn->profile, sizeof(struct profile));
     syn->interp_counter = (unsigned int) (syn->af->samplerate * (float) s_interp_length);
   }
 }
@@ -90,35 +90,35 @@ static void init_slot(struct synthesizer *syn, struct slot *slot)
 {
   /* Generate a random grain based on configuration */
 
-  slot->cooldown   = randr((unsigned int) (syn->cfg.min_cooldown * syn->af->samplerate),   (unsigned int) (syn->cfg.max_cooldown * syn->af->samplerate));
+  slot->cooldown   = randr((unsigned int) (syn->profile.min_cooldown * syn->af->samplerate),   (unsigned int) (syn->profile.max_cooldown * syn->af->samplerate));
 
   /* The offset is converted to an absolute offset within the file */
-  slot->offset     = randr((unsigned int) (syn->cfg.min_offset * syn->af->samplerate),     (unsigned int) (syn->cfg.max_offset * syn->af->samplerate));
+  slot->offset     = randr((unsigned int) (syn->profile.min_offset * syn->af->samplerate),     (unsigned int) (syn->profile.max_offset * syn->af->samplerate));
   slot->offset     = (syn->af->size + syn->fcursor - slot->offset) % syn->af->size;
 
-  slot->length     = randr((unsigned int) (syn->cfg.min_length * syn->af->samplerate),     (unsigned int) (syn->cfg.max_length * syn->af->samplerate));
+  slot->length     = randr((unsigned int) (syn->profile.min_length * syn->af->samplerate),     (unsigned int) (syn->profile.max_length * syn->af->samplerate));
 
-  slot->gain       = randf(syn->cfg.min_gain, syn->cfg.max_gain);
-  slot->multiplier = randf(syn->cfg.min_multiplier, syn->cfg.max_multiplier);
-  slot->reverse    = randf(0.f, 1.f) < syn->cfg.reverse_probability;
+  slot->gain       = randf(syn->profile.min_gain, syn->profile.max_gain);
+  slot->multiplier = randf(syn->profile.min_multiplier, syn->profile.max_multiplier);
+  slot->reverse    = randf(0.f, 1.f) < syn->profile.reverse_probability;
 
   slot->cursor     = 0;
 }
 
 void synthesize(struct synthesizer *syn, size_t length)
 {
-  if (syn->cfg.num_slots > syn->slots_capac) {
-    syn->slots = xrealloc(syn->slots, sizeof(*syn->slots) * syn->cfg.num_slots);
-    syn->slots_capac = syn->cfg.num_slots;
+  if (syn->profile.num_slots > syn->slots_capac) {
+    syn->slots = xrealloc(syn->slots, sizeof(*syn->slots) * syn->profile.num_slots);
+    syn->slots_capac = syn->profile.num_slots;
   }
 
-  if (syn->cfg.num_slots > syn->num_slots) {
-    for (unsigned int i = syn->num_slots; i < syn->cfg.num_slots; ++i) {
+  if (syn->profile.num_slots > syn->num_slots) {
+    for (unsigned int i = syn->num_slots; i < syn->profile.num_slots; ++i) {
       init_slot(syn, &syn->slots[i]);
     }
   }
 
-  syn->num_slots = syn->cfg.num_slots;
+  syn->num_slots = syn->profile.num_slots;
 
   if (length > syn->data_size) {
     syn->data = xrealloc(syn->data, sizeof(*syn->data) * length);
@@ -128,7 +128,7 @@ void synthesize(struct synthesizer *syn, size_t length)
   for (size_t i = 0; i < length; ++i) {
 
     float sample = 0.f;
-    float cfg_interp = 1.f - (float) syn->interp_counter / (s_interp_length * (float) syn->af->samplerate);
+    float profile_interp = 1.f - (float) syn->interp_counter / (s_interp_length * (float) syn->af->samplerate);
 
     for (unsigned int i = 0; i < syn->slots_capac; ++i) {
 
@@ -176,15 +176,15 @@ void synthesize(struct synthesizer *syn, size_t length)
       float env = t < .25f ? 4.f * t : 4.f * (1.f - t) / 3.f;
 
       /* Scale new/old slots based on configuration interpolation */
-      float cfg_scaling = 1.f;
-      if (syn->source_cfg.num_slots < syn->target_cfg.num_slots && i > syn->source_cfg.num_slots) {
-        cfg_scaling = cfg_interp;
-      } else if (syn->source_cfg.num_slots > syn->target_cfg.num_slots && i > syn->target_cfg.num_slots) {
-        cfg_scaling = 1.f - cfg_interp;
+      float profile_scaling = 1.f;
+      if (syn->source_profile.num_slots < syn->target_profile.num_slots && i > syn->source_profile.num_slots) {
+        profile_scaling = profile_interp;
+      } else if (syn->source_profile.num_slots > syn->target_profile.num_slots && i > syn->target_profile.num_slots) {
+        profile_scaling = 1.f - profile_interp;
       }
 
       /* Accumulate sample */
-      sample += af_sample * env * s->gain * cfg_scaling;
+      sample += af_sample * env * s->gain * profile_scaling;
       s->cursor++;
     }
 
@@ -195,23 +195,23 @@ void synthesize(struct synthesizer *syn, size_t length)
 
     syn->data[i] = sample;
 
-    /* Interpolate between configurations */
+    /* Interpolate between profiles */
     if (syn->interp_counter) {
 
       syn->interp_counter--;
 
-      syn->cfg.num_slots = (unsigned int) ((float) syn->source_cfg.num_slots + cfg_interp * ((float) syn->target_cfg.num_slots - (float) syn->source_cfg.num_slots));
-      syn->cfg.min_offset = syn->source_cfg.min_offset + cfg_interp * (syn->target_cfg.min_offset - syn->source_cfg.min_offset);
-      syn->cfg.max_offset = syn->source_cfg.max_offset + cfg_interp * (syn->target_cfg.max_offset - syn->source_cfg.max_offset);
-      syn->cfg.min_length = syn->source_cfg.min_length + cfg_interp * (syn->target_cfg.min_length - syn->source_cfg.min_length);
-      syn->cfg.max_length = syn->source_cfg.max_length + cfg_interp * (syn->target_cfg.max_length - syn->source_cfg.max_length);
-      syn->cfg.min_cooldown = syn->source_cfg.min_cooldown + cfg_interp * (syn->target_cfg.min_cooldown - syn->source_cfg.min_cooldown);
-      syn->cfg.max_cooldown = syn->source_cfg.max_cooldown + cfg_interp * (syn->target_cfg.max_cooldown - syn->source_cfg.max_cooldown);
-      syn->cfg.min_multiplier = syn->source_cfg.min_multiplier + cfg_interp * (syn->target_cfg.min_multiplier - syn->source_cfg.min_multiplier);
-      syn->cfg.max_multiplier = syn->source_cfg.max_multiplier + cfg_interp * (syn->target_cfg.max_multiplier - syn->source_cfg.max_multiplier);
-      syn->cfg.min_gain = syn->source_cfg.min_gain + cfg_interp * (syn->target_cfg.min_gain - syn->source_cfg.min_gain);
-      syn->cfg.max_gain = syn->source_cfg.max_gain + cfg_interp * (syn->target_cfg.max_gain - syn->source_cfg.max_gain);
-      syn->cfg.reverse_probability = syn->source_cfg.reverse_probability + cfg_interp * (syn->target_cfg.reverse_probability - syn->source_cfg.reverse_probability);
+      syn->profile.num_slots = (unsigned int) ((float) syn->source_profile.num_slots + profile_interp * ((float) syn->target_profile.num_slots - (float) syn->source_profile.num_slots));
+      syn->profile.min_offset = syn->source_profile.min_offset + profile_interp * (syn->target_profile.min_offset - syn->source_profile.min_offset);
+      syn->profile.max_offset = syn->source_profile.max_offset + profile_interp * (syn->target_profile.max_offset - syn->source_profile.max_offset);
+      syn->profile.min_length = syn->source_profile.min_length + profile_interp * (syn->target_profile.min_length - syn->source_profile.min_length);
+      syn->profile.max_length = syn->source_profile.max_length + profile_interp * (syn->target_profile.max_length - syn->source_profile.max_length);
+      syn->profile.min_cooldown = syn->source_profile.min_cooldown + profile_interp * (syn->target_profile.min_cooldown - syn->source_profile.min_cooldown);
+      syn->profile.max_cooldown = syn->source_profile.max_cooldown + profile_interp * (syn->target_profile.max_cooldown - syn->source_profile.max_cooldown);
+      syn->profile.min_multiplier = syn->source_profile.min_multiplier + profile_interp * (syn->target_profile.min_multiplier - syn->source_profile.min_multiplier);
+      syn->profile.max_multiplier = syn->source_profile.max_multiplier + profile_interp * (syn->target_profile.max_multiplier - syn->source_profile.max_multiplier);
+      syn->profile.min_gain = syn->source_profile.min_gain + profile_interp * (syn->target_profile.min_gain - syn->source_profile.min_gain);
+      syn->profile.max_gain = syn->source_profile.max_gain + profile_interp * (syn->target_profile.max_gain - syn->source_profile.max_gain);
+      syn->profile.reverse_probability = syn->source_profile.reverse_probability + profile_interp * (syn->target_profile.reverse_probability - syn->source_profile.reverse_probability);
     }
   }
 }

@@ -2,6 +2,7 @@
 #include <string.h>
 
 #include "audio-file.h"
+#include "xmalloc.h"
 #include "select.h"
 #include "audio.h"
 #include "config.h"
@@ -9,24 +10,24 @@
 #include "log.h"
 #include "synthesizer.h"
 
-/* Reload set the configuration automatically
+/* Set the profile automatically
  * by matching volume with 'level' field */
-static int s_auto_config = 0;
-static size_t s_current_config_index = 0;
+static int s_auto_profile = 0;
+static size_t s_current_profile_index = 0;
 static float s_current_volume = 0.f;
 
-static void switch_config(struct synthesizer *syn, struct config_list *cl)
+static void switch_profile(struct synthesizer *syn, struct config *cfg)
 {
-  struct config *cfg = &cl->cfgs[s_current_config_index];
+  struct profile *profile = &cfg->profiles[s_current_profile_index];
 
-  if (cfg->name) {
-    log_info("Switching to config %zu (%s)", s_current_config_index, cfg->name);
+  if (profile->name) {
+    log_info("Switching to profile %zu (%s)", s_current_profile_index, profile->name);
   } else {
-    log_info("Switching to config %zu", s_current_config_index);
+    log_info("Switching to profile %zu", s_current_profile_index);
   }
 
   lock_synthesizer(syn);
-  set_synthesizer_config(syn, &cl->cfgs[s_current_config_index], 0);
+  set_synthesizer_profile(syn, &cfg->profiles[s_current_profile_index], 0);
   unlock_synthesizer(syn);
 }
 
@@ -34,14 +35,14 @@ static void help(void)
 {
   log_info("Key mappings:");
   log_info("    q       Quit");
-  log_info("    a       Toggle auto config mode");
-  log_info("    l       List config entries");
-  log_info("    j       Go down config list");
-  log_info("    k       Go up config list");
-  log_info("    c       Print config number");
+  log_info("    a       Toggle auto profile mode");
+  log_info("    l       List profile entries");
+  log_info("    j       Go down profile list");
+  log_info("    k       Go up profile list");
+  log_info("    p       Print profile number");
   log_info("    v       Print volume");
   log_info("    h       Print this help message");
-  log_info("    0-9     Select config by index");
+  log_info("    0-9     Select profile by index");
 }
 
 int main(int argc, char **argv)
@@ -70,7 +71,7 @@ int main(int argc, char **argv)
 
       switch (c) {
       case 'a':
-        s_auto_config = 1;
+        s_auto_profile = 1;
         continue;
       default:
         break;
@@ -113,8 +114,8 @@ int main(int argc, char **argv)
   }
 
   /* Load configuration */
-  struct config_list cl;
-  err = load_config_list(config_path, &cl);
+  struct config cfg;
+  err = load_config(config_path, &cfg);
   if (err != NULL) {
     log_err("Failed to load config %s: %s", config_path, err);
     return -1;
@@ -122,16 +123,16 @@ int main(int argc, char **argv)
   log_info("Configuration: %s", config_path);
 
   /* Load audio file */
-  struct audio_file af;
-  err = load_audio_file(audio_path, &af);
+  struct audio_file *af = xcalloc(1, sizeof(*af));
+  err = load_audio_file(audio_path, af);
   if (err != NULL) {
     log_err("Failed to load audio file %s: %s", audio_path, err);
     return -1;
   }
 
   log_info("Input file:    %s", audio_path);
-  log_info("Channels:      %d", af.channels);
-  log_info("Sample rate:   %d", af.samplerate);
+  log_info("Channels:      %d", af->channels);
+  log_info("Sample rate:   %d", af->samplerate);
 
   err = event_loop_start(config_path);
   if (err != NULL) {
@@ -147,7 +148,7 @@ int main(int argc, char **argv)
 
   /* Match the streams settings with the audio file,
    * (sample rate and number of channels) */
-  match_audio_file_sample_spec(&af);
+  match_audio_file_sample_spec(af);
 
   /* Let the user select a sink... */
   struct list *l = list_sinks();
@@ -173,8 +174,8 @@ int main(int argc, char **argv)
   }
   free_list(l);
 
-  struct synthesizer *syn = create_synthesizer(&af);
-  set_synthesizer_config(syn, &cl.cfgs[s_current_config_index], 1);
+  struct synthesizer *syn = create_synthesizer(af);
+  set_synthesizer_profile(syn, &cfg.profiles[s_current_profile_index], 1);
 
   if (start_streams(syn) < 0) {
     err = get_audio_error_string();
@@ -182,8 +183,10 @@ int main(int argc, char **argv)
     return -1;
   }
 
+  log_info("Ready");
+
   quit = 0;
-  struct config_list new_cl;
+  struct config new_cl;
   while (!quit) {
     struct event ev = event_loop_poll();
 
@@ -205,49 +208,49 @@ int main(int argc, char **argv)
 
         case 'a':
           /* Toggle auto config */
-          s_auto_config = !s_auto_config;
-          log_info("Auto-config: %s", s_auto_config ? "on" : "off");
+          s_auto_profile = !s_auto_profile;
+          log_info("Auto-profile: %s", s_auto_profile ? "on" : "off");
           break;
 
         case 'j':
           /* Decrement config index */
-          if (s_auto_config || s_current_config_index == 0)
+          if (s_auto_profile || s_current_profile_index == 0)
             break;
-          s_current_config_index--;
-          switch_config(syn, &cl);
+          s_current_profile_index--;
+          switch_profile(syn, &cfg);
           break;
 
         case 'k':
           /* Increment config index */
-          if (s_auto_config || s_current_config_index == cl.size - 1)
+          if (s_auto_profile || s_current_profile_index == cfg.size - 1)
             break;
-          s_current_config_index++;
-          switch_config(syn, &cl);
+          s_current_profile_index++;
+          switch_profile(syn, &cfg);
           break;
 
         case 'v':
           log_info("Volume: %.4f", s_current_volume);
           break;
 
-        case 'c':
+        case 'p':
         {
-          struct config *cfg = &cl.cfgs[s_current_config_index];
-          if (cfg->name) {
-            log_info("Current config: %zu (%s)", s_current_config_index, cfg->name);
+          struct profile *profile = &cfg.profiles[s_current_profile_index];
+          if (profile->name) {
+            log_info("Current profile: %zu (%s)", s_current_profile_index, profile->name);
           } else {
-            log_info("Current config: %zu", s_current_config_index);
+            log_info("Current profile: %zu", s_current_profile_index);
           }
           break;
         }
 
         case 'l':
         {
-          log_info("Loaded configs:");
-          for (size_t i = 0; i < cl.size; ++i) {
-            struct config *cfg = &cl.cfgs[i];
-            char sel = i == s_current_config_index ? '*' : ' ';
-            if (cfg->name) {
-              log_info("  %c %zu: %s", sel, i, cfg->name);
+          log_info("Profiles:");
+          for (size_t i = 0; i < cfg.size; ++i) {
+            struct profile *profile = &cfg.profiles[i];
+            char sel = i == s_current_profile_index ? '*' : ' ';
+            if (profile->name) {
+              log_info("  %c %zu: %s", sel, i, profile->name);
             } else {
               log_info("  %c %zu", sel, i);
             }
@@ -261,7 +264,7 @@ int main(int argc, char **argv)
 
         default:
           if ('0' <= ev.c && ev.c <= '9') {
-            if (s_auto_config) {
+            if (s_auto_profile) {
               /* Don't allow manual config selection 
                * if auto-config is set */
               break;
@@ -269,13 +272,13 @@ int main(int argc, char **argv)
 
             size_t index = ev.c - '0';
 
-            if (index >= cl.size) {
+            if (index >= cfg.size) {
               log_err("No config with index %zu", index);
               break;
             }
 
-            s_current_config_index = index;
-            switch_config(syn, &cl);
+            s_current_profile_index = index;
+            switch_profile(syn, &cfg);
             break;
           }
           break;
@@ -285,20 +288,20 @@ int main(int argc, char **argv)
       case EVENT_WATCH:
 
         /* Configuration file is modified */
-        err = load_config_list(config_path, &new_cl);
+        err = load_config(config_path, &new_cl);
 
         if (err != NULL) {
           log_err("Failed to load config: %s", err);
         } else {
-          free_config_list(&cl);
-          memcpy(&cl, &new_cl, sizeof(struct config_list));
+          free_config(&cfg);
+          memcpy(&cfg, &new_cl, sizeof(struct config));
           log_info("Config %s reloaded", config_path);
 
-          if (s_current_config_index >= cl.size) {
-            s_current_config_index = cl.size - 1;
+          if (s_current_profile_index >= cfg.size) {
+            s_current_profile_index = cfg.size - 1;
           }
 
-          switch_config(syn, &cl);
+          switch_profile(syn, &cfg);
         }
 
         break;
@@ -307,21 +310,21 @@ int main(int argc, char **argv)
       {
         s_current_volume = ev.volume;
 
-        if (!s_auto_config)
+        if (!s_auto_profile)
           break;
 
         /* Select configuration based on volume if
          * auto-config is set */
 
         size_t i;
-        for (i = 0; i < cl.size - 1; ++i) {
-          if (cl.cfgs[i + 1].level > ev.volume)
+        for (i = 0; i < cfg.size - 1; ++i) {
+          if (cfg.profiles[i + 1].level > ev.volume)
             break;
         }
 
-        if (i != s_current_config_index) {
-          s_current_config_index = i;
-          switch_config(syn, &cl);
+        if (i != s_current_profile_index) {
+          s_current_profile_index = i;
+          switch_profile(syn, &cfg);
         }
 
         break;

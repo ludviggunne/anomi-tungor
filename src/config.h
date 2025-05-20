@@ -3,11 +3,9 @@
 
 #include <stddef.h>
 
-/* Single configuration, the configuration file
- * can contain multiple of these */
-struct config {
-  char          *name;                   /* The name of this configuration */
-  float          level;                  /* The volume level where this configuration is activated */
+struct profile {
+  char          *name;                   /* The name of this profile */
+  float          level;                  /* The volume level where this profile is activated */
   float          min_offset;             /* Minimum sample offset in audio file in seconds */
   float          max_offset;             /* Maximum sample offset in audio file in seconds */
   float          min_length;             /* Minimum length of grain in seconds */
@@ -24,12 +22,12 @@ struct config {
 
 /* List of configurations, this corresponds
  * to the configuration file */
-struct config_list {
-  struct config *cfgs;
-  size_t         size;
+struct config {
+  struct profile *profiles;
+  size_t          size;
 };
 
-const char *load_config_list(const char *path, struct config_list *cl);
-void free_config_list(struct config_list *cl);
+const char *load_config(const char *path, struct config *cfg);
+void free_config(struct config *cfg);
 
 #endif

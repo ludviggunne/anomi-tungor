@@ -10,27 +10,27 @@
 
 static char s_errorbuf[512] = {0};
 
-static void default_config(struct config *cfg)
+static void default_profile(struct profile *profile)
 {
 
-  /* Default configuration. Any field that is not
+  /* Default profile. Any field that is not
    * specified in the configuration file is filled
    * in with a value from here */
 
-  cfg->name                = NULL;
-  cfg->level               = 0.f;
-  cfg->min_offset          = .01f;
-  cfg->max_offset          = 2.f;
-  cfg->min_length          = .01f;
-  cfg->max_length          = 2.f;
-  cfg->min_cooldown        = .01f;
-  cfg->max_cooldown        = 2.f;
-  cfg->min_gain            = 0.01f;
-  cfg->max_gain            = 1.f;
-  cfg->min_multiplier      = 0.8408964152537144;
-  cfg->max_multiplier      = 1.1892071150027212f;
-  cfg->reverse_probability = .1f;
-  cfg->num_slots           = 8;
+  profile->name                = NULL;
+  profile->level               = 0.f;
+  profile->min_offset          = .01f;
+  profile->max_offset          = 2.f;
+  profile->min_length          = .01f;
+  profile->max_length          = 2.f;
+  profile->min_cooldown        = .01f;
+  profile->max_cooldown        = 2.f;
+  profile->min_gain            = 0.01f;
+  profile->max_gain            = 1.f;
+  profile->min_multiplier      = 0.8408964152537144;
+  profile->max_multiplier      = 1.1892071150027212f;
+  profile->reverse_probability = .1f;
+  profile->num_slots           = 8;
 }
 
 /* Just load a text file in to a string */
@@ -78,8 +78,8 @@ static unsigned long get_lineno(const char *text, const char *offset)
   return lineno;
 }
 
-/* Convenience macro for loading a configuration value */
-#define LOAD_VALUE(obj, cfg, name)\
+/* Convenience macro for loading a profile value */
+#define LOAD_VALUE(obj, profile, name)\
 {\
   cJSON *item;\
   if ((item = cJSON_GetObjectItem(obj, #name))) {\
@@ -88,21 +88,21 @@ static unsigned long get_lineno(const char *text, const char *offset)
                "Attribute '%s' is not a number",\
                #name);\
       cJSON_Delete(json);\
-      free_config_list(cl);\
+      free_config(cfg);\
       return s_errorbuf;\
     }\
-    cfg->name = item->valuedouble;\
+    profile->name = item->valuedouble;\
   }\
 }
 
 /* Verify that min/max values are valid */
-#define VERIFY_RANGE(cfg, name)\
+#define VERIFY_RANGE(profile, name)\
 {\
-  if (cfg->min_##name >= cfg->max_##name) {\
+  if (profile->min_##name >= profile->max_##name) {\
     snprintf(s_errorbuf, sizeof(s_errorbuf),\
              "min_" #name " is greater or equal to max_" #name);\
     cJSON_Delete(json);\
-    free_config_list(cl);\
+    free_config(cfg);\
     return s_errorbuf;\
   }\
 }
@@ -138,12 +138,12 @@ static void warn_on_unknown_keys(cJSON *obj)
       }
     }
     if (!known) {
-      log_warn("Unknown config key: %s", obj->string);
+      log_warn("Unknown profile key: %s", obj->string);
     }
   }
 }
 
-const char *load_config_list(const char *path, struct config_list *cl)
+const char *load_config(const char *path, struct config *cfg)
 {
   char *text;
   cJSON *json;
@@ -171,22 +171,22 @@ const char *load_config_list(const char *path, struct config_list *cl)
     return "Config file is not an array";
   }
 
-  cl->size = cJSON_GetArraySize(json);
-  cl->cfgs = xmalloc(sizeof(*cl->cfgs) * cl->size);
+  cfg->size = cJSON_GetArraySize(json);
+  cfg->profiles = xmalloc(sizeof(*cfg->profiles) * cfg->size);
 
-  /* Load all configurations */
-  for (size_t i = 0; i < cl->size; ++i) {
-    struct config *cfg = &cl->cfgs[i];
+  /* Load profiles */
+  for (size_t i = 0; i < cfg->size; ++i) {
+    struct profile *profile = &cfg->profiles[i];
     cJSON *entry = cJSON_GetArrayItem(json, i);
 
     /* Fill in default values */
-    default_config(cfg);
+    default_profile(profile);
 
     if (!cJSON_IsObject(entry)) {
       cJSON_Delete(json);
-      free_config_list(cl);
+      free_config(cfg);
       snprintf(s_errorbuf, sizeof(s_errorbuf),
-               "Config entry %zu is not an object",
+               "Profile %zu is not an object",
                i);
       return s_errorbuf;
     }
@@ -197,35 +197,35 @@ const char *load_config_list(const char *path, struct config_list *cl)
         snprintf(s_errorbuf, sizeof(s_errorbuf),
                  "Attribute 'name' is not a string");
         cJSON_Delete(json);
-        free_config_list(cl);
+        free_config(cfg);
         return s_errorbuf;
       }
 
-      free(cfg->name);
-      cfg->name = strdup(item->valuestring);
+      free(profile->name);
+      profile->name = strdup(item->valuestring);
     }
 
     /* Load values */
-    LOAD_VALUE(entry, cfg, level);
-    LOAD_VALUE(entry, cfg, min_offset);
-    LOAD_VALUE(entry, cfg, max_offset);
-    LOAD_VALUE(entry, cfg, min_length);
-    LOAD_VALUE(entry, cfg, max_length);
-    LOAD_VALUE(entry, cfg, min_cooldown);
-    LOAD_VALUE(entry, cfg, max_cooldown);
-    LOAD_VALUE(entry, cfg, min_gain);
-    LOAD_VALUE(entry, cfg, max_gain);
-    LOAD_VALUE(entry, cfg, min_multiplier);
-    LOAD_VALUE(entry, cfg, max_multiplier);
-    LOAD_VALUE(entry, cfg, reverse_probability);
-    LOAD_VALUE(entry, cfg, num_slots);
+    LOAD_VALUE(entry, profile, level);
+    LOAD_VALUE(entry, profile, min_offset);
+    LOAD_VALUE(entry, profile, max_offset);
+    LOAD_VALUE(entry, profile, min_length);
+    LOAD_VALUE(entry, profile, max_length);
+    LOAD_VALUE(entry, profile, min_cooldown);
+    LOAD_VALUE(entry, profile, max_cooldown);
+    LOAD_VALUE(entry, profile, min_gain);
+    LOAD_VALUE(entry, profile, max_gain);
+    LOAD_VALUE(entry, profile, min_multiplier);
+    LOAD_VALUE(entry, profile, max_multiplier);
+    LOAD_VALUE(entry, profile, reverse_probability);
+    LOAD_VALUE(entry, profile, num_slots);
 
     /* Verify min/max values */
-    VERIFY_RANGE(cfg, offset);
-    VERIFY_RANGE(cfg, length);
-    VERIFY_RANGE(cfg, cooldown);
-    VERIFY_RANGE(cfg, gain);
-    VERIFY_RANGE(cfg, multiplier);
+    VERIFY_RANGE(profile, offset);
+    VERIFY_RANGE(profile, length);
+    VERIFY_RANGE(profile, cooldown);
+    VERIFY_RANGE(profile, gain);
+    VERIFY_RANGE(profile, multiplier);
 
     warn_on_unknown_keys(entry);
   }
@@ -235,8 +235,8 @@ const char *load_config_list(const char *path, struct config_list *cl)
   return NULL;
 }
 
-void free_config_list(struct config_list *cl)
+void free_config(struct config *cfg)
 {
-  free(cl->cfgs);
-  memset(cl, 0, sizeof(*cl));
+  free(cfg->profiles);
+  memset(cfg, 0, sizeof(*cfg));
 }

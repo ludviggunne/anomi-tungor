@@ -6,12 +6,12 @@
 
 struct synthesizer;
 
-/* Configuration must be set with set_synthesizer_config */
+/* Profile must be set with set_synthesizer_config */
 struct synthesizer *create_synthesizer(struct audio_file *audio);
 
 void free_synthesizer(struct synthesizer *syn);
 
-void set_synthesizer_config(struct synthesizer *syn, struct config *cfg, int set_now);
+void set_synthesizer_profile(struct synthesizer *syn, struct profile *profile, int set_now);
 
 /* Synthesize length samples */
 void synthesize(struct synthesizer *syn, size_t length);
