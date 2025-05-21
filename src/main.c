@@ -198,8 +198,12 @@ int main(int argc, char **argv)
         case 'q':
           log_info("Do you really want to quit? (y/n)");
 
-          int c = fgetc(stdin);
-          if (c == 'y' || c == 'q') {
+          int c;
+          do {
+            c = fgetc(stdin);
+          } while (strchr("ynYNq", c) == NULL);
+
+          if (c == 'y' || c == 'Y' || c == 'q') {
             quit = 1;
           } else {
             log_info("Continuing...");
