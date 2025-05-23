@@ -6,8 +6,6 @@
 #include "xmalloc.h"
 #include "synthesizer.h"
 
-static const float s_interp_length = 4.f;
-
 struct slot {
   unsigned int     offset;
   unsigned int     length;
@@ -34,7 +32,8 @@ struct synthesizer {
   float                *data;              /* Synthesized samples */
   size_t                data_size;
 
-  unsigned int          interp_counter;    /* Counter used for inteprolating between configurations */
+  float                 interp_time;       /* Time in seconds for profile interpolation */
+  unsigned int          interp_counter;    /* Counter used for inteprolating between profiles */
 };
 
 struct synthesizer *create_synthesizer(struct audio_file *audio)
@@ -51,6 +50,8 @@ struct synthesizer *create_synthesizer(struct audio_file *audio)
 
   syn->data_size = 4096;
   syn->data = xcalloc(sizeof(*syn->data), syn->data_size);
+
+  syn->interp_time = 1.f;
 
   pthread_mutexattr_init(&mutexattr);
   pthread_mutex_init(&syn->lock, &mutexattr);
@@ -70,7 +71,7 @@ void set_synthesizer_profile(struct synthesizer *syn, struct profile *profile, i
   } else {
     memcpy(&syn->target_profile, profile, sizeof(struct profile));
     memcpy(&syn->source_profile, &syn->profile, sizeof(struct profile));
-    syn->interp_counter = (unsigned int) (syn->af->samplerate * (float) s_interp_length);
+    syn->interp_counter = (unsigned int) (syn->af->samplerate * syn->interp_time);
   }
 }
 
@@ -146,7 +147,7 @@ void synthesize(struct synthesizer *syn, size_t length)
   for (size_t i = 0; i < length; ++i) {
 
     float sample = 0.f;
-    float profile_interp = 1.f - (float) syn->interp_counter / (s_interp_length * (float) syn->af->samplerate);
+    float profile_interp = 1.f - (float) syn->interp_counter / (syn->interp_time * (float) syn->af->samplerate);
 
     for (unsigned int i = 0; i < syn->slots_capac; ++i) {
 
@@ -255,5 +256,10 @@ void sythesizer_fade_out(struct synthesizer *syn)
   memcpy(&syn->target_profile, &syn->profile, sizeof(struct profile));
   syn->target_profile.min_gain = 0.f;
   syn->target_profile.max_gain = 0.f;
-  syn->interp_counter = (unsigned int) (syn->af->samplerate * (float) s_interp_length);
+  syn->interp_counter = (unsigned int) (syn->af->samplerate * syn->interp_time);
+}
+
+void sythesizer_set_interp_time(struct synthesizer *syn, float t)
+{
+  syn->interp_time = t;
 }

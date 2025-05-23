@@ -16,6 +16,7 @@
 static int s_auto_profile = 0;
 static size_t s_current_profile_index = 0;
 static float s_current_volume = 0.f;
+static float s_profile_interp_time = 2.f;
 
 static void switch_profile(struct synthesizer *syn, struct config *cfg)
 {
@@ -44,6 +45,8 @@ static void help(void)
   log_info("    v       Print volume");
   log_info("    h       Print this help message");
   log_info("    f       Fade out");
+  log_info("    u       Increase profile interpolation time");
+  log_info("    d       Decrease profile interpolation time");
   log_info("    0-9     Select profile by index");
 }
 
@@ -202,6 +205,7 @@ int main(int argc, char **argv)
 
   struct synthesizer *syn = create_synthesizer(af);
   set_synthesizer_profile(syn, &cfg.profiles[s_current_profile_index], 1);
+  sythesizer_set_interp_time(syn, s_profile_interp_time);
 
   if (start_streams(syn) < 0) {
     err = get_audio_error_string();
@@ -278,6 +282,28 @@ int main(int argc, char **argv)
           }
           break;
         }
+
+        case 'u':
+          if (s_profile_interp_time > 1.f) {
+            s_profile_interp_time += .5f;
+          } else {
+            s_profile_interp_time *= 2.f;
+          }
+
+          log_info("Profile interpolation time set to %.3fs", s_profile_interp_time);
+          sythesizer_set_interp_time(syn, s_profile_interp_time);
+          break;
+
+        case 'd':
+          if (s_profile_interp_time <= 1.f) {
+            s_profile_interp_time /= 2.f;
+          } else {
+            s_profile_interp_time -= .5f;
+          }
+
+          log_info("Profile interpolation time set to %.3fs", s_profile_interp_time);
+          sythesizer_set_interp_time(syn, s_profile_interp_time);
+          break;
 
         case 'l':
         {

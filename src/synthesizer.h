@@ -21,6 +21,8 @@ float *synthesizer_get_data_ptr(struct synthesizer *syn);
 
 void sythesizer_fade_out(struct synthesizer *syn);
 
+void sythesizer_set_interp_time(struct synthesizer *syn, float t);
+
 /* Acquire/release lock on synthesizer (accessed in
  * threaded PulseAudio mainloop) */
 void lock_synthesizer(struct synthesizer *syn);
