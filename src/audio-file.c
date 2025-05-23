@@ -34,7 +34,8 @@ const char *load_audio_file(const char *path, struct audio_file *af)
   if (af->channels > 1) {
     /* Mix channels */
     log_info("Audio file has %d channels, mixing them in to one", af->channels);
-    for (size_t i = 0; i < af->size / af->channels; ++i) {
+    af->size /= af->channels;
+    for (size_t i = 0; i < af->size; ++i) {
       float a = 0.f;
       for (size_t c = 0; c < af->channels; ++c) {
         a += af->data[af->channels * i + c];

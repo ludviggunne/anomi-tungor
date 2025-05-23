@@ -5,7 +5,7 @@
 #include "log.h"
 #include "select.h"
 
-static const char s_chars[] = "0123456789abcdefghijklmnopqrstuvwxyz";
+static const char s_chars[] = "0123456789";
 
 struct list *list_select(struct list *l)
 {
@@ -21,6 +21,9 @@ struct list *list_select(struct list *l)
   const char *sel;
   do {
     int s = fgetc(stdin);
+    if (s == 'q') {
+      return NULL;
+    }
     sel = strchr(s_chars, s);
   } while (sel == NULL || sel >= c);
 

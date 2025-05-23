@@ -152,26 +152,38 @@ int main(int argc, char **argv)
 
   /* Let the user select a sink... */
   struct list *l = list_sinks();
-  log_info("Select sink:");
+  log_info("Select sink ('q' to quit):");
   struct list *sink = list_select(l);
+
+  if (sink == NULL) {
+    log_info("Quit");
+    return 0;
+  }
 
   if (connect_sink(sink->name) < 0) {
     err = get_audio_error_string();
     log_err("%s", err);
     return -1;
   }
+  log_info("Selected sink %s", sink->name);
   free_list(l);
 
   /* ...and source */
   l = list_sources();
-  log_info("Select source:");
+  log_info("Select source ('q' to quit):");
   struct list *source = list_select(l);
+
+  if (source == NULL) {
+    log_info("Quit");
+    return 0;
+  }
 
   if (connect_source(source->name) < 0) {
     err = get_audio_error_string();
     log_err("%s", err);
     return -1;
   }
+  log_info("Selected source %s", source->name);
   free_list(l);
 
   struct synthesizer *syn = create_synthesizer(af);
@@ -184,9 +196,15 @@ int main(int argc, char **argv)
   }
 
   log_info("Ready");
+  log_info("Press 'h' for a list of key bindings");
+
+  /* Print current config */
+  struct event pevent;
+  pevent.type = EVENT_INPUT;
+  pevent.c = 'p';
+  queue_event(&pevent);
 
   quit = 0;
-  struct config new_cl;
   while (!quit) {
     struct event ev = event_loop_poll();
 
@@ -290,8 +308,10 @@ int main(int argc, char **argv)
         break;
 
       case EVENT_WATCH:
+      {
 
         /* Configuration file is modified */
+        struct config new_cl;
         err = load_config(config_path, &new_cl);
 
         if (err != NULL) {
@@ -303,12 +323,17 @@ int main(int argc, char **argv)
 
           if (s_current_profile_index >= cfg.size) {
             s_current_profile_index = cfg.size - 1;
+            switch_profile(syn, &cfg);
+          } else {
+            /* No message if index didn't change */
+            lock_synthesizer(syn);
+            set_synthesizer_profile(syn, &cfg.profiles[s_current_profile_index], 0);
+            unlock_synthesizer(syn);
           }
-
-          switch_profile(syn, &cfg);
         }
 
         break;
+      }
 
       case EVENT_VOLUME:
       {

@@ -1,7 +1,8 @@
 PREFIX?=.
 
-CFLAGS=-Wall -Wpedantic -Wextra -O3 $(shell pkg-config --cflags libpulse libcjson sndfile)
-LDFLAGS= -lm -flto $(shell pkg-config --libs libpulse libcjson sndfile)
+LIBS=libpulse libcjson sndfile
+CFLAGS=-Wall -Wpedantic -Wextra -O3 $(shell pkg-config --cflags $(LIBS))
+LDFLAGS= -lm -flto $(shell pkg-config --libs $(LIBS))
 
 SOURCEDIR=src
 BUILDDIR=build

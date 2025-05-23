@@ -27,7 +27,7 @@ static void default_profile(struct profile *profile)
   profile->max_cooldown        = 2.f;
   profile->min_gain            = 0.01f;
   profile->max_gain            = 1.f;
-  profile->min_multiplier      = 0.8408964152537144;
+  profile->min_multiplier      = 0.8408964152537144f;
   profile->max_multiplier      = 1.1892071150027212f;
   profile->reverse_probability = .1f;
   profile->num_slots           = 8;
