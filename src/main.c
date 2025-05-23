@@ -42,6 +42,7 @@ static void help(void)
   log_info("    p       Print profile number");
   log_info("    v       Print volume");
   log_info("    h       Print this help message");
+  log_info("    f       Fade out");
   log_info("    0-9     Select profile by index");
 }
 
@@ -284,10 +285,15 @@ int main(int argc, char **argv)
           help();
           break;
 
+        case 'f':
+          log_info("Fading out...");
+          sythesizer_fade_out(syn);
+          break;
+
         default:
           if ('0' <= ev.c && ev.c <= '9') {
             if (s_auto_profile) {
-              /* Don't allow manual config selection 
+              /* Don't allow manual config selection
                * if auto-config is set */
               break;
             }

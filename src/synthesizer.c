@@ -248,3 +248,12 @@ void unlock_synthesizer(struct synthesizer *syn)
 {
   pthread_mutex_unlock(&syn->lock);
 }
+
+void sythesizer_fade_out(struct synthesizer *syn)
+{
+  memcpy(&syn->source_profile, &syn->profile, sizeof(struct profile));
+  memcpy(&syn->target_profile, &syn->profile, sizeof(struct profile));
+  syn->target_profile.min_gain = 0.f;
+  syn->target_profile.max_gain = 0.f;
+  syn->interp_counter = (unsigned int) (syn->af->samplerate * (float) s_interp_length);
+}

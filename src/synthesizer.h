@@ -19,6 +19,8 @@ void synthesize(struct synthesizer *syn, size_t length);
 /* Get a pointer to synthesized samples */
 float *synthesizer_get_data_ptr(struct synthesizer *syn);
 
+void sythesizer_fade_out(struct synthesizer *syn);
+
 /* Acquire/release lock on synthesizer (accessed in
  * threaded PulseAudio mainloop) */
 void lock_synthesizer(struct synthesizer *syn);
