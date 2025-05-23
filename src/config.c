@@ -172,7 +172,7 @@ const char *load_config(const char *path, struct config *cfg)
   }
 
   cfg->size = cJSON_GetArraySize(json);
-  cfg->profiles = xmalloc(sizeof(*cfg->profiles) * cfg->size);
+  cfg->profiles = xcalloc(sizeof(*cfg->profiles), cfg->size);
 
   /* Load profiles */
   for (size_t i = 0; i < cfg->size; ++i) {
@@ -237,6 +237,9 @@ const char *load_config(const char *path, struct config *cfg)
 
 void free_config(struct config *cfg)
 {
+  for (size_t i = 0; i < cfg->size; ++i) {
+    free(cfg->profiles[i].name);
+  }
   free(cfg->profiles);
   memset(cfg, 0, sizeof(*cfg));
 }
