@@ -7,6 +7,7 @@
 #include "event.h"
 #include "audio.h"
 #include "synthesizer.h"
+#include "output.h"
 #include "xmalloc.h"
 
 /* Names for publicly visible PulseAudio objects */
@@ -372,6 +373,7 @@ static void stream_write_callback(pa_stream *s, size_t nbytes, void *userdata)
   lock_synthesizer(syn);
   synthesize(syn, nsamps);
   void *data = synthesizer_get_data_ptr(syn);
+  write_to_output_file(data, nsamps);
   pa_stream_write(s, data, nbytes, NULL, 0, PA_SEEK_RELATIVE);
   unlock_synthesizer(syn);
 

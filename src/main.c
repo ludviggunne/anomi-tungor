@@ -3,6 +3,7 @@
 
 #include "audio-file.h"
 #include "xmalloc.h"
+#include "output.h"
 #include "select.h"
 #include "audio.h"
 #include "config.h"
@@ -55,6 +56,7 @@ int main(int argc, char **argv)
   const char *err;
   const char *audio_path = NULL;
   const char *config_path = NULL;
+  const char *output_path = NULL;
 
   /* Parse command line arguments */
   for (argv++; *argv; ++argv) {
@@ -89,6 +91,9 @@ int main(int argc, char **argv)
         break;
       case 'c':
         config_path = arg;
+        break;
+      case 'o':
+        output_path = arg;
         break;
       default:
         log_err("Unknown option '-%c'", c);
@@ -139,6 +144,14 @@ int main(int argc, char **argv)
   if (err != NULL) {
     log_err("Failed to start event loop: %s", err);
     return -1;
+  }
+
+  if (output_path) {
+    err = open_output_file(output_path, af);
+    if (err != NULL) {
+      log_err("%s", err);
+      return -1;
+    }
   }
 
   if (init_audio() < 0) {
