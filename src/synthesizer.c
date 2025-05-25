@@ -231,6 +231,10 @@ void synthesize(struct synthesizer *syn, size_t length)
       syn->profile.min_gain = syn->source_profile.min_gain + profile_interp * (syn->target_profile.min_gain - syn->source_profile.min_gain);
       syn->profile.max_gain = syn->source_profile.max_gain + profile_interp * (syn->target_profile.max_gain - syn->source_profile.max_gain);
       syn->profile.reverse_probability = syn->source_profile.reverse_probability + profile_interp * (syn->target_profile.reverse_probability - syn->source_profile.reverse_probability);
+
+      if (syn->interp_counter == 0) {
+        log_info("Done interpolating/fading");
+      }
     }
   }
 }

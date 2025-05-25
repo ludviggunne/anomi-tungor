@@ -45,8 +45,8 @@ static void help(void)
   log_info("    v       Print volume");
   log_info("    h       Print this help message");
   log_info("    f       Fade out");
-  log_info("    u       Increase profile interpolation time");
-  log_info("    d       Decrease profile interpolation time");
+  log_info("    u       Increase fade out/profile interpolation time");
+  log_info("    d       Decrease fade out/profile interpolation time");
   log_info("    0-9     Select profile by index");
 }
 
