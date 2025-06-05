@@ -1,8 +1,6 @@
 #ifndef AUDIO_FILE_H
 #define AUDIO_FILE_H
 
-#include <stddef.h>
-
 struct audio_file {
   float        *data;
   unsigned int  size; /* Number of samples */
