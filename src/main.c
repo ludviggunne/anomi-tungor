@@ -47,6 +47,7 @@ static void help(void)
   log_info("    f       Fade out");
   log_info("    u       Increase fade out/profile interpolation time");
   log_info("    d       Decrease fade out/profile interpolation time");
+  log_info("    r       Reload config");
   log_info("    0-9     Select profile by index");
 }
 
@@ -328,6 +329,13 @@ int main(int argc, char **argv)
           log_info("Fading out...");
           sythesizer_fade_out(syn);
           break;
+
+        case 'r':
+        {
+          struct event ev = { .type = EVENT_WATCH, };
+          queue_event(&ev);
+          break;
+        }
 
         default:
           if ('0' <= ev.c && ev.c <= '9') {
