@@ -296,6 +296,10 @@ int main(int argc, char **argv)
           break;
 
         case 'd':
+          if (s_profile_interp_time <= .1f) {
+            break;
+          }
+
           if (s_profile_interp_time <= 1.f) {
             s_profile_interp_time /= 2.f;
           } else {
