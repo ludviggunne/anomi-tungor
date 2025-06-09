@@ -281,6 +281,7 @@ int main(int argc, char **argv)
           } else {
             log_info("Current profile: %zu", s_current_profile_index);
           }
+          log_info("Current interpolation time:  %.3fs", s_profile_interp_time);
           break;
         }
 
