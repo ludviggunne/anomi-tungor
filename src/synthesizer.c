@@ -219,7 +219,8 @@ void synthesize(struct synthesizer *syn, size_t length)
 
       syn->interp_counter--;
 
-      syn->profile.num_slots = (unsigned int) ((float) syn->source_profile.num_slots + profile_interp * ((float) syn->target_profile.num_slots - (float) syn->source_profile.num_slots));
+      float num_slots_interp = ((float) syn->source_profile.num_slots + profile_interp * ((float) syn->target_profile.num_slots - (float) syn->source_profile.num_slots));
+      syn->profile.num_slots = (unsigned int) (num_slots_interp < .0f ? .0f : num_slots_interp);
       syn->profile.min_offset = syn->source_profile.min_offset + profile_interp * (syn->target_profile.min_offset - syn->source_profile.min_offset);
       syn->profile.max_offset = syn->source_profile.max_offset + profile_interp * (syn->target_profile.max_offset - syn->source_profile.max_offset);
       syn->profile.min_length = syn->source_profile.min_length + profile_interp * (syn->target_profile.min_length - syn->source_profile.min_length);
