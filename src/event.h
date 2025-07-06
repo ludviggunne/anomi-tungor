@@ -4,13 +4,11 @@
 enum event_type {
   EVENT_INPUT,    /* User pressed a key */
   EVENT_WATCH,    /* Config file was modified */
-  EVENT_VOLUME,   /* Vaolume level was updated */
 };
 
 struct event {
   enum event_type type;   /* The type of this event */
   int c;                  /* Character for input events */
-  float volume;           /* Volume level for volume events */
 };
 
 const char *event_loop_start(const char *watch_path);

@@ -16,7 +16,6 @@
  * by matching volume with 'level' field */
 static int s_auto_profile = 0;
 static size_t s_current_profile_index = 0;
-static float s_current_volume = 0.f;
 static float s_profile_interp_time = 2.f;
 
 static void switch_profile(struct synthesizer *syn, struct config *cfg)
@@ -43,7 +42,6 @@ static void help(void)
   log_info("    j       Go down profile list");
   log_info("    k       Go up profile list");
   log_info("    p       Print profile number");
-  log_info("    v       Print volume");
   log_info("    h       Print this help message");
   log_info("    f       Fade out");
   log_info("    u       Increase fade out/profile interpolation time");
@@ -188,24 +186,6 @@ int main(int argc, char **argv)
   log_info("Selected sink %s", sink->name);
   free_list(l);
 
-  /* ...and source */
-  l = list_sources();
-  log_info("Select source ('q' to quit):");
-  struct list *source = list_select(l);
-
-  if (source == NULL) {
-    log_info("Quit");
-    return 0;
-  }
-
-  if (connect_source(source->name) < 0) {
-    err = get_audio_error_string();
-    log_err("%s", err);
-    return -1;
-  }
-  log_info("Selected source %s", source->name);
-  free_list(l);
-
   struct chord_list *chords = CHORD_LIST_INIT;
   // add_chord(&chords, 4, PC_F, PC_BFLAT, PC_C, PC_D);
   // add_chord(&chords, 3, PC_G, PC_BFLAT, PC_D);
@@ -224,7 +204,7 @@ int main(int argc, char **argv)
   set_synthesizer_profile(syn, &cfg.profiles[s_current_profile_index], 1);
   sythesizer_set_interp_time(syn, s_profile_interp_time);
 
-  if (start_streams(syn) < 0) {
+  if (start_stream(syn) < 0) {
     err = get_audio_error_string();
     log_err("%s", err);
     return -1;
@@ -283,10 +263,6 @@ int main(int argc, char **argv)
             break;
           s_current_profile_index++;
           switch_profile(syn, &cfg);
-          break;
-
-        case 'v':
-          log_info("Volume: %.4f", s_current_volume);
           break;
 
         case 'p':
@@ -409,30 +385,6 @@ int main(int argc, char **argv)
             set_synthesizer_profile(syn, &cfg.profiles[s_current_profile_index], 0);
             unlock_synthesizer(syn);
           }
-        }
-
-        break;
-      }
-
-      case EVENT_VOLUME:
-      {
-        s_current_volume = ev.volume;
-
-        if (!s_auto_profile)
-          break;
-
-        /* Select configuration based on volume if
-         * auto-config is set */
-
-        size_t i;
-        for (i = 0; i < cfg.size - 1; ++i) {
-          if (cfg.profiles[i + 1].level > ev.volume)
-            break;
-        }
-
-        if (i != s_current_profile_index) {
-          s_current_profile_index = i;
-          switch_profile(syn, &cfg);
         }
 
         break;

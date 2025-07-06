@@ -1,10 +1,8 @@
-#include <math.h>
 #include <string.h>
 #include <stdio.h>
 #include <pulse/pulseaudio.h>
 
 #include "log.h"
-#include "event.h"
 #include "audio.h"
 #include "synthesizer.h"
 #include "output.h"
@@ -12,7 +10,6 @@
 
 /* Names for publicly visible PulseAudio objects */
 static const char *s_application_name = "Anomi";
-static const char *s_record_stream_name = "Anomi Input";
 static const char *s_playback_stream_name = "Anomi Output";
 
 static char s_errorbuf[512] = {0};
@@ -27,7 +24,6 @@ static int s_op_done;
 static pa_context *s_context;
 static pa_threaded_mainloop *s_mainloop;
 static pa_stream *s_playback_stream = NULL;
-static pa_stream *s_record_stream = NULL;
 
 /* List with sink/source info */
 static struct list *s_list;
@@ -64,10 +60,6 @@ static void context_connect_callback(pa_context *context, void *userdata)
 static void cleanup(void)
 {
   /* TODO: syncing */
-
-  if (s_record_stream) {
-    pa_stream_disconnect(s_record_stream);
-  }
 
   if (s_playback_stream) {
     pa_stream_disconnect(s_playback_stream);
@@ -111,45 +103,6 @@ int init_audio(void)
   atexit(cleanup);
 
   return 0;
-}
-
-static void source_info_list_callback(pa_context *context, const pa_source_info *info,
-                                      int eol, void *userdata)
-{
-  (void) context;
-  (void) userdata;
-
-  const char *key;
-  const char *description;
-
-  if (eol) {
-    pa_threaded_mainloop_signal(s_mainloop, 0);
-    return;
-  }
-
-  key = PA_PROP_DEVICE_DESCRIPTION;
-  description = pa_proplist_gets(info->proplist, key);
-
-  struct list *l = xcalloc(1, sizeof(*l));
-  l->index = info->index;
-  l->name = strdup(info->name);
-  l->description = strdup(description);
-  l->next = s_list;
-  s_list = l;
-}
-
-struct list *list_sources(void)
-{
-  struct list *l;
-
-  pa_threaded_mainloop_lock(s_mainloop);
-  pa_context_get_source_info_list(s_context, source_info_list_callback, NULL);
-  pa_threaded_mainloop_wait(s_mainloop);
-  pa_threaded_mainloop_unlock(s_mainloop);
-
-  l = s_list;
-  s_list = NULL;
-  return l;
 }
 
 static void sink_info_list_callback(pa_context *context, const pa_sink_info *info,
@@ -216,36 +169,6 @@ void match_audio_file_sample_spec(struct audio_file *af)
   s_default_sample_spec.channels = af->channels;
 }
 
-int connect_source(const char *name)
-{
-  s_record_stream = pa_stream_new(s_context, s_record_stream_name, &s_default_sample_spec, NULL);
-  if (s_record_stream == NULL) {
-    snprintf(s_errorbuf, sizeof(s_errorbuf),
-             "Failed to create record stream: %s",
-             pa_strerror(pa_context_errno(s_context)));
-    return -1;
-  }
-
-  s_ok = 0;
-  pa_threaded_mainloop_lock(s_mainloop);
-  pa_stream_set_state_callback(s_record_stream, stream_connect_callback, s_record_stream);
-
-  /* Start stream in paused mode */
-  pa_stream_connect_record(s_record_stream, name, NULL, PA_STREAM_START_CORKED);
-  pa_threaded_mainloop_wait(s_mainloop);
-  pa_threaded_mainloop_unlock(s_mainloop);
-
-  if (!s_ok) {
-    name = name ? name : "default source";
-    snprintf(s_errorbuf, sizeof(s_errorbuf),
-             "Failed to connect to %s: %s",
-             name, pa_strerror(pa_context_errno(s_context)));
-    return -1;
-  }
-
-  return 0;
-}
-
 int connect_sink(const char *name)
 {
   s_playback_stream = pa_stream_new(s_context, s_playback_stream_name, &s_default_sample_spec, NULL);
@@ -273,7 +196,7 @@ int connect_sink(const char *name)
 
   /* Start stream in paused mode.
    * Sync with record stream. */
-  pa_stream_connect_playback(s_playback_stream, name, &attr, PA_STREAM_START_CORKED, NULL, s_record_stream);
+  pa_stream_connect_playback(s_playback_stream, name, &attr, PA_STREAM_START_CORKED, NULL, NULL);
   pa_threaded_mainloop_wait(s_mainloop);
   pa_threaded_mainloop_unlock(s_mainloop);
 
@@ -332,38 +255,6 @@ static int cork_stream(pa_stream *stream, int b)
   return -1;
 }
 
-void stream_read_callback(pa_stream *s, size_t nbytes, void *userdata)
-{
-  (void) userdata;
-  (void) nbytes;
-
-  const void *data;
-  size_t size;
-  struct event ev;
-
-  do {
-    pa_stream_peek(s, &data, &size);
-    if (!data) {
-      break;
-    }
-
-    /* Compute volume (square root of mean square) */
-    float acc = 0.f;
-
-    for (size_t i = 0; i < size; ++i) {
-      float samp = ((const float *) data)[i];
-        acc += samp * samp;
-    }
-
-    ev.type = EVENT_VOLUME;
-    ev.volume = sqrtf(acc / (float) size);
-
-    queue_event(&ev);
-
-    pa_stream_drop(s);
-  } while (size > 0);
-}
-
 static void stream_write_callback(pa_stream *s, size_t nbytes, void *userdata)
 {
   struct synthesizer *syn = userdata;
@@ -390,13 +281,9 @@ static void stream_notify_callback(pa_stream *p, void *userdata)
   log_warn("Stream notify: %s", msg);
 }
 
-int start_streams(struct synthesizer *syn)
+int start_stream(struct synthesizer *syn)
 {
-  /* Set read/write callbacks and start streams */
-
-  pa_stream_set_read_callback(s_record_stream, stream_read_callback, NULL); 
-  if (cork_stream(s_record_stream, 0) < 0)
-    return -1;
+  /* Set write callback and start streams */
 
   pa_stream_set_write_callback(s_playback_stream, stream_write_callback, syn);
 
