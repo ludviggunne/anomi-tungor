@@ -303,6 +303,7 @@ void free_list(struct list *l)
   while (l) {
     struct list *tmp = l;
     free(l->name);
+    free(l->description);
     l = l->next;
     free(tmp);
   }

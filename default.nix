@@ -11,6 +11,7 @@ pkgs.stdenv.mkDerivation {
     pulseaudio
     libsndfile
     cjson
+    portmidi
   ];
 
   phases = [ "unpackPhase" "buildPhase" "installPhase" ];

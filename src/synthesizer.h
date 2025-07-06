@@ -3,12 +3,11 @@
 
 #include "audio-file.h"
 #include "config.h"
-#include "harmony.h"
 
 struct synthesizer;
 
 /* Profile must be set with set_synthesizer_config */
-struct synthesizer *create_synthesizer(struct audio_file *audio, struct chord_list *chords);
+struct synthesizer *create_synthesizer(struct audio_file *audio);
 
 void free_synthesizer(struct synthesizer *syn);
 
@@ -29,6 +28,7 @@ void sythesizer_set_interp_time(struct synthesizer *syn, float t);
 void lock_synthesizer(struct synthesizer *syn);
 void unlock_synthesizer(struct synthesizer *syn);
 
-void change_chord(struct synthesizer *syn);
+void synthesizer_note_on(struct synthesizer *syn, int pitch_class);
+void synthesizer_note_off(struct synthesizer *syn, int pitch_class);
 
 #endif

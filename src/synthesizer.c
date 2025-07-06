@@ -2,10 +2,11 @@
 #include <math.h>
 #include <pthread.h>
 
-#include "harmony.h"
 #include "log.h"
 #include "xmalloc.h"
 #include "synthesizer.h"
+
+#define PITCH_STEP 1.0594630943592953f
 
 struct slot {
   unsigned int     offset;
@@ -36,11 +37,10 @@ struct synthesizer {
   float                 interp_time;       /* Time in seconds for profile interpolation */
   unsigned int          interp_counter;    /* Counter used for inteprolating between profiles */
 
-  struct chord_list    *chords;
-  struct chord_list    *curr_chord;
+  int                   pitches[12];
 };
 
-struct synthesizer *create_synthesizer(struct audio_file *audio, struct chord_list *chords)
+struct synthesizer *create_synthesizer(struct audio_file *audio)
 {
   struct synthesizer *syn;
   pthread_mutexattr_t mutexattr;
@@ -60,15 +60,11 @@ struct synthesizer *create_synthesizer(struct audio_file *audio, struct chord_li
   pthread_mutexattr_init(&mutexattr);
   pthread_mutex_init(&syn->lock, &mutexattr);
 
-  syn->chords = chords;
-  syn->curr_chord = chords;
-
   return syn;
 }
 
 void free_synthesizer(struct synthesizer *syn)
 {
-  free_chord_list(syn->chords);
   free(syn->slots);
 }
 
@@ -129,9 +125,18 @@ static void init_slot(struct synthesizer *syn, struct slot *slot)
   // slot->multiplier = randf(syn->profile.min_multiplier, syn->profile.max_multiplier);
   slot->reverse = randf(0.f, 1.f) < syn->profile.reverse_probability;
 
-  int note_index = rand() % syn->curr_chord->size;
-  slot->multiplier = syn->curr_chord->pitches[note_index];
-  slot->multiplier *= powf(2.f, randr(0, 6)) / 8.f;
+  int tries = 4;
+  int note_index;
+  do {
+    note_index = rand() % 12;
+  } while (syn->pitches[note_index] == 0 && tries--);
+
+  if (syn->pitches[note_index] == 0) {
+    slot->gain = 0;
+  } else {
+    slot->multiplier = powf(PITCH_STEP, note_index);
+    slot->multiplier *= powf(2.f, randr(0, 6)) / 8.f;
+  }
 
   slot->cursor = 0;
 }
@@ -281,9 +286,13 @@ void sythesizer_set_interp_time(struct synthesizer *syn, float t)
   syn->interp_time = t;
 }
 
-void change_chord(struct synthesizer *syn)
+void synthesizer_note_on(struct synthesizer *syn, int pitch_class)
 {
-  syn->curr_chord = syn->curr_chord->next;
-  if (syn->curr_chord == NULL)
-    syn->curr_chord = syn->chords;
+  syn->pitches[pitch_class] = 1;
 }
+
+void synthesizer_note_off(struct synthesizer *syn, int pitch_class)
+{
+  syn->pitches[pitch_class] = 0;
+}
+

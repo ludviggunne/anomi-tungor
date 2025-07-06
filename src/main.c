@@ -2,7 +2,6 @@
 #include <string.h>
 
 #include "audio-file.h"
-#include "harmony.h"
 #include "xmalloc.h"
 #include "output.h"
 #include "select.h"
@@ -11,6 +10,7 @@
 #include "event.h"
 #include "log.h"
 #include "synthesizer.h"
+#include "midi.h"
 
 /* Set the profile automatically
  * by matching volume with 'level' field */
@@ -47,7 +47,6 @@ static void help(void)
   log_info("    u       Increase fade out/profile interpolation time");
   log_info("    d       Decrease fade out/profile interpolation time");
   log_info("    r       Reload config");
-  log_info("    c       Change chord");
   log_info("    0-9     Select profile by index");
 }
 
@@ -158,6 +157,8 @@ int main(int argc, char **argv)
     }
   }
 
+  midi_init();
+
   if (init_audio() < 0) {
     err = get_audio_error_string();
     log_err("Failed to initalize audio: %s", err);
@@ -186,21 +187,7 @@ int main(int argc, char **argv)
   log_info("Selected sink %s", sink->name);
   free_list(l);
 
-  struct chord_list *chords = CHORD_LIST_INIT;
-  // add_chord(&chords, 4, PC_F, PC_BFLAT, PC_C, PC_D);
-  // add_chord(&chords, 3, PC_G, PC_BFLAT, PC_D);
-  // add_chord(&chords, 3, PC_A, PC_CSHARP, PC_E);
-
-  add_chord(&chords, 3, PC_B, PC_D, PC_G);
-  add_chord(&chords, 3, PC_C, PC_D, PC_G);
-  add_chord(&chords, 3, PC_C, PC_E, PC_G);
-  add_chord(&chords, 3, PC_F, PC_A, PC_C);
-  add_chord(&chords, 3, PC_E, PC_G, PC_B);
-  add_chord(&chords, 3, PC_A, PC_C, PC_E);
-  add_chord(&chords, 3, PC_G, PC_B, PC_D);
-  add_chord(&chords, 3, PC_C, PC_E, PC_G);
-
-  struct synthesizer *syn = create_synthesizer(af, chords);
+  struct synthesizer *syn = create_synthesizer(af);
   set_synthesizer_profile(syn, &cfg.profiles[s_current_profile_index], 1);
   sythesizer_set_interp_time(syn, s_profile_interp_time);
 
@@ -334,11 +321,6 @@ int main(int argc, char **argv)
           break;
         }
 
-        case 'c':
-          log_info("Changing chord");
-          change_chord(syn);
-          break;
-
         default:
           if ('0' <= ev.c && ev.c <= '9') {
             if (s_auto_profile) {
@@ -387,6 +369,18 @@ int main(int argc, char **argv)
           }
         }
 
+        break;
+      }
+
+      case EVENT_MIDI:
+      {
+        lock_synthesizer(syn);
+        if (ev.on) {
+          synthesizer_note_on(syn, ev.pitch);
+        } else {
+          synthesizer_note_off(syn, ev.pitch);
+        }
+        unlock_synthesizer(syn);
         break;
       }
     }
