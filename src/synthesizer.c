@@ -38,6 +38,8 @@ struct synthesizer {
   unsigned int          interp_counter;    /* Counter used for inteprolating between profiles */
 
   int                   pitches[12];
+  int                   pitches_freezed[12];
+  int                   freeze_pitches;
 };
 
 struct synthesizer *create_synthesizer(struct audio_file *audio)
@@ -93,6 +95,9 @@ static float randf(float min, float max)
 
 static void init_slot(struct synthesizer *syn, struct slot *slot)
 {
+  if (!syn->freeze_pitches)
+    memcpy(syn->pitches_freezed, syn->pitches, sizeof(syn->pitches_freezed));
+
   /* Generate a random grain based on configuration */
 
   unsigned int max_cooldown = syn->profile.max_cooldown * syn->af->samplerate;
@@ -129,9 +134,9 @@ static void init_slot(struct synthesizer *syn, struct slot *slot)
   int note_index;
   do {
     note_index = rand() % 12;
-  } while (syn->pitches[note_index] == 0 && tries--);
+  } while (syn->pitches_freezed[note_index] == 0 && tries--);
 
-  if (syn->pitches[note_index] == 0) {
+  if (syn->pitches_freezed[note_index] == 0) {
     slot->gain = 0;
   } else {
     slot->multiplier = powf(PITCH_STEP, note_index);
@@ -296,3 +301,7 @@ void synthesizer_note_off(struct synthesizer *syn, int pitch_class)
   syn->pitches[pitch_class] = 0;
 }
 
+void synthesizer_freeze_pitches(struct synthesizer *syn, int b)
+{
+  syn->freeze_pitches = b;
+}

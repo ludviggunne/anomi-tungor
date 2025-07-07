@@ -14,6 +14,8 @@
 
 static PmStream *s_stream = NULL;
 static PmEvent s_event_buf[EVENT_BUF_SIZE];
+static int s_freeze = 0;
+static int s_middle_pedal_held = 0;
 
 static void cleanup(void)
 {
@@ -34,16 +36,31 @@ static void *midi_proc(void *args)
   for (;;) {
     int num_events_read = Pm_Read(s_stream, s_event_buf, EVENT_BUF_SIZE);
     for (int i = 0; i < num_events_read; ++i) {
-
-
-      int status = Pm_MessageStatus(s_event_buf[i].message);
-      if (status != note_on && status != note_off)
-        continue;
-
       struct event ev;
-      ev.type = EVENT_MIDI;
-      ev.on = status == note_on;
-      ev.pitch = Pm_MessageData1(s_event_buf[i].message) % 12;
+      int status = Pm_MessageStatus(s_event_buf[i].message);
+      int data1 = Pm_MessageData1(s_event_buf[i].message);
+      int data2 = Pm_MessageData2(s_event_buf[i].message);
+
+      log_info("midi %d:%d:%d", status, data1, data2);
+
+      if (status == middle_pedal) {
+        ev.type = EVENT_FREEZE;
+        if (data2 && !s_middle_pedal_held) {
+          s_freeze = !s_freeze;
+          ev.freeze = s_freeze;
+        } else {
+          s_middle_pedal_held = !!data2;
+          continue;
+        }
+      } else if (status == note_on) {
+        ev.type = EVENT_MIDI;
+        ev.on = 1;
+        ev.pitch = data1 % 12;
+      } else if (status == note_off) {
+        ev.type = EVENT_MIDI;
+        ev.on = 0;
+        ev.pitch = data1 % 12;
+      } else continue;
 
       queue_event(&ev);
     }

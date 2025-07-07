@@ -30,5 +30,6 @@ void unlock_synthesizer(struct synthesizer *syn);
 
 void synthesizer_note_on(struct synthesizer *syn, int pitch_class);
 void synthesizer_note_off(struct synthesizer *syn, int pitch_class);
+void synthesizer_freeze_pitches(struct synthesizer *syn, int b);
 
 #endif

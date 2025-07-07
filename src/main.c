@@ -383,6 +383,14 @@ int main(int argc, char **argv)
         unlock_synthesizer(syn);
         break;
       }
+
+      case EVENT_FREEZE:
+      {
+        lock_synthesizer(syn);
+        synthesizer_freeze_pitches(syn, ev.freeze);
+        unlock_synthesizer(syn);
+        break;
+      }
     }
   }
 }

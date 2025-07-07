@@ -5,6 +5,7 @@ enum event_type {
   EVENT_INPUT,    /* User pressed a key */
   EVENT_WATCH,    /* Config file was modified */
   EVENT_MIDI,
+  EVENT_FREEZE,
 };
 
 struct event {
@@ -12,6 +13,7 @@ struct event {
   int c;                  /* Character for input events */
   int pitch;              /* Midi event pitch class */
   int on;                 /* Midi on/off */
+  int freeze;             /* Freeze synthesizer pitches */
 };
 
 const char *event_loop_start(const char *watch_path);
