@@ -29,15 +29,12 @@ static void *midi_proc(void *args)
 
   const int note_on = 144;
   const int note_off = 128;
+  const int middle_pedal = 176;
 
   for (;;) {
     int num_events_read = Pm_Read(s_stream, s_event_buf, EVENT_BUF_SIZE);
     for (int i = 0; i < num_events_read; ++i) {
 
-      log_info("MIDI: %d:%d:%d",
-               Pm_MessageData1(s_event_buf[i].message),
-               Pm_MessageData2(s_event_buf[i].message),
-               Pm_MessageStatus(s_event_buf[i].message));
 
       int status = Pm_MessageStatus(s_event_buf[i].message);
       if (status != note_on && status != note_off)
